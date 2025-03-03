@@ -5,6 +5,7 @@ import vaccineService from "../services/vaccineService";
 import comboService from "../services/comboService";
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import AdminLayout from './AdminLayout';
 
 function ComboManage() {
     const [showModal, setShowModal] = useState(false);

@@ -1,23 +1,23 @@
-import React from "react";
-import { Nav } from "react-bootstrap";
-import { NavLink } from "react-router-dom";
+import React from 'react';
+import { NavLink } from 'react-router-dom';
 
 function Sidebar() {
 	return (
-		<Nav defaultActiveKey="/ManageAccount" className="flex-column-md">
-			<NavLink to={"/ManageAccount"} className={"nav-link"}>
+		<div className="admin-sidebar">
+			<div className="sidebar-header">Dashboard</div>
+			<NavLink to="/ManageAccount" className={({isActive}) => isActive ? "active" : ""}>
+				<i className="fas fa-user"></i>
 				Account
 			</NavLink>
-			<NavLink to={"/ManageVaccine"} className={"nav-link"}>
+			<NavLink to="/ManageVaccine" className={({isActive}) => isActive ? "active" : ""}>
+				<i className="fas fa-syringe"></i>
 				Vaccine
 			</NavLink>
-			<NavLink to={"/ManageCombo"} className={"nav-link"}>
+			<NavLink to="/ManageCombo" className={({isActive}) => isActive ? "active" : ""}>
+				<i className="fas fa-vials"></i>
 				Vaccine Combo
 			</NavLink>
-			<NavLink to={"#"} className={"nav-link"}>
-				###
-			</NavLink>
-		</Nav>
+		</div>
 	);
 }
 
