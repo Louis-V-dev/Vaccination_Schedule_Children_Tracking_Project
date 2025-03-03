@@ -73,7 +73,7 @@ public class Account {
     private Set<Role> roles = new HashSet<>();
 //    @ManyToOne(fetch = FetchType.LAZY)
 //    @JoinColumn(name = "Role_ID")
-//    private Account_Role role;
+//    private Account_Role role;lll
 
     public Account() {}
 
