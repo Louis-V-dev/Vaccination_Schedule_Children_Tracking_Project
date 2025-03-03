@@ -1,0 +1,101 @@
+:root {
+    --primary-green: #00B37E;
+    --secondary-green: #34A853;
+    --accent-green: #4CAF50;
+    --light-green: #E8F5E9;
+    --dark-green: #2E7D32;
+}
+
+.register-page {
+    min-height: 100vh;
+    background-color: var(--light-green);
+    padding: 40px 20px;
+}
+
+.register-logo {
+    width: 80px;
+    margin-bottom: 20px;
+}
+
+.register-card {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    border: none;
+    background-color: #ffffff;
+}
+
+.register-card-body {
+    padding: 3rem;
+}
+
+.input-group .form-control {
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-color: var(--primary-green);
+}
+
+.input-group .form-control:focus {
+    border-color: var(--secondary-green);
+    box-shadow: 0 0 0 0.2rem rgba(0, 179, 126, 0.25);
+}
+
+.input-group-text {
+    background-color: var(--primary-green);
+    color: white;
+    border-color: var(--primary-green);
+}
+
+.btn-primary {
+    background-color: var(--primary-green);
+    border-color: var(--primary-green);
+}
+
+.btn-primary:hover {
+    background-color: var(--dark-green);
+    border-color: var(--dark-green);
+}
+
+.btn-primary:disabled {
+    background-color: var(--primary-green);
+    border-color: var(--primary-green);
+    opacity: 0.65;
+}
+
+.gender-group {
+    display: flex;
+    gap: 1.5rem;
+}
+
+.form-check {
+    user-select: none;
+}
+
+.form-check-input:checked {
+    background-color: var(--primary-green);
+    border-color: var(--primary-green);
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.link-primary {
+    text-decoration: none;
+    color: var(--primary-green);
+}
+
+.link-primary:hover {
+    color: var(--dark-green);
+    text-decoration: underline;
+}
+
+.text-primary {
+    color: var(--primary-green) !important;
+}
+
+.form-control.is-invalid {
+    border-color: #dc3545;
+}
+
+.invalid-feedback {
+    color: #dc3545;
+} 
