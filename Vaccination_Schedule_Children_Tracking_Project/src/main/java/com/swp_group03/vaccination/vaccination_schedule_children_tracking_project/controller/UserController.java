@@ -11,13 +11,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
-@RequestMapping("/users")
+@RequestMapping("/api/users")
 @CrossOrigin(origins = "http://localhost:5173")
 @Tag(name = "User", description = "User management")
 public class UserController {
@@ -36,6 +37,7 @@ public class UserController {
     }
 
     @PatchMapping("/{account_id}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Account> updateUser(@PathVariable String account_id, @Validated @RequestBody UserUpdate request) {
         return ResponseEntity.ok(userService.updateAccount(request, account_id));
     }

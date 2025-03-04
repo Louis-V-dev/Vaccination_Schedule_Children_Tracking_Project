@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { Button, Col, Container, Form, Modal, Row, Table } from "react-bootstrap";
+import { Button, Col, Container, Form, Modal, Row, Table, Alert } from "react-bootstrap";
 import Sidebar from "../components/Sidebar"; // Assuming Sidebar is correctly implemented
 import vaccineService from "../services/vaccineService";
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import axios from "axios";
+import AdminLayout from './AdminLayout';
 
 // Get auth header function
 const getAuthHeader = () => {
@@ -36,6 +37,7 @@ function VaccineManage() {
     const [expiryDate, setExpiryDate] = useState("");
     const [status, setStatus] = useState("Active"); // Default to Active
     const [vaccineType, setVaccineType] = useState("");
+    const [price, setPrice] = useState(""); // Add price state
     const [newCategoryName, setNewCategoryName] = useState("");
     const [vaccineCategories, setVaccineCategories] = useState([]);
     const [categoryError, setCategoryError] = useState("");
@@ -60,9 +62,18 @@ function VaccineManage() {
         try {
             setLoading(true);
             const data = await vaccineService.getAllVaccines();
+            console.log('Vaccines fetched successfully:', data);
             setVaccines(data);
         } catch (error) {
-            toast.error("Failed to fetch vaccines: " + error.message);
+            console.error('Vaccine fetch error:', error);
+            
+            // Only redirect on authentication errors
+            if (error.message?.includes('Authentication error')) {
+                toast.error("Authentication problem. Please log in again.");
+                setTimeout(() => window.location.href = '/login', 3000);
+            } else {
+                toast.error("Failed to fetch vaccines: " + (error.message || "Unknown error"));
+            }
         } finally {
             setLoading(false);
         }
@@ -72,19 +83,28 @@ function VaccineManage() {
         try {
             const headers = getAuthHeader();
             console.log('Fetching categories with headers:', headers);
-            const response = await axios.get('http://localhost:8080/api/categories/all', {
-                headers: headers
-            });
-            console.log('Categories response:', response.data);
-            setVaccineCategories(response.data || []);
-        } catch (error) {
-            console.error('Error fetching categories:', error);
-            if (error.response?.status === 403) {
-                toast.error("Authentication error. Please log in again.");
-                window.location.href = '/login';
-            } else {
-                toast.error("Failed to fetch vaccine categories");
+            
+            // The correct endpoint for categories is /api/vaccines/categories, not /api/categories/all
+            try {
+                const response = await axios.get('http://localhost:8080/api/vaccines/categories', {
+                    headers: headers
+                });
+                console.log('Categories response:', response.data);
+                setVaccineCategories(response.data || []);
+            } catch (error) {
+                console.error('Error fetching categories:', error.response?.status, error.response?.data);
+                
+                // Handle authentication errors
+                if (error.response?.status === 403 || error.response?.status === 401) {
+                    toast.error("Authentication error. Please log in again.");
+                    setTimeout(() => window.location.href = '/login', 3000);
+                } else {
+                    toast.error("Failed to fetch vaccine categories");
+                }
             }
+        } catch (error) {
+            console.error('Outer error fetching categories:', error);
+            toast.error("Failed to fetch vaccine categories");
         }
     };
 
@@ -131,6 +151,7 @@ function VaccineManage() {
         setExpiryDate("");
         setStatus("Active");
         setVaccineType("");
+        setPrice(""); // Clear price
         setNewCategoryName("");
         setErrors({});
     };
@@ -155,6 +176,7 @@ function VaccineManage() {
         setProductionDate(vaccine.productionDate || "");
         setStatus(vaccine.status === "true" ? "Active" : "Inactive");
         setVaccineType(vaccine.categoryName || "");
+        setPrice(vaccine.price?.toString() || ""); // Set price
         setShow(true);
     };
 
@@ -174,6 +196,7 @@ function VaccineManage() {
         if (!expiryDate) newErrors.expiryDate = "Expiry Date is required";
         if (!productionDate) newErrors.productionDate = "Production Date is required";
         if (!vaccineType) newErrors.vaccineType = "Vaccine Category is required";
+        if (!price || isNaN(price) || parseFloat(price) < 0) newErrors.price = "Price must be a non-negative number"; // Validate price
 
         // Validate production date is before expiry date
         if (productionDate && expiryDate) {
@@ -191,35 +214,50 @@ function VaccineManage() {
 
         try {
             setLoading(true);
-            const vaccineData = {
+            const formData = new FormData();
+            
+            // Append all fields individually
+            formData.append('name', vaccineName.trim());
+            formData.append('description', description ? description.trim() : "");
+            formData.append('manufacturer', origin.trim());
+            formData.append('dosage', instructions ? instructions.trim() : "");
+            formData.append('contraindications', contraindications ? contraindications.trim() : "");
+            formData.append('precautions', precautions ? precautions.trim() : "");
+            formData.append('interactions', interactions ? interactions.trim() : "");
+            formData.append('adverseReactions', sideEffects ? sideEffects.trim() : "");
+            formData.append('storageConditions', storageInstructions ? storageInstructions.trim() : "");
+            formData.append('recommended', targetGroups ? targetGroups.trim() : "");
+            formData.append('preVaccination', schedule ? schedule.trim() : "");
+            formData.append('compatibility', postVaccinationReactions ? postVaccinationReactions.trim() : "");
+            formData.append('quantity', Math.max(1, parseInt(quantity, 10)));
+            formData.append('expirationDate', expiryDate);
+            formData.append('productionDate', productionDate);
+            formData.append('status', status === "Active" ? "true" : "false");
+            formData.append('categoryName', vaccineType);
+            formData.append('price', price ? price : "0"); // Add price to formData
+            
+            // Add image if present
+            if (vaccineImage) {
+                formData.append('imagineUrl', vaccineImage, vaccineImage.name);
+            }
+
+            console.log('Saving vaccine with fields:', {
                 name: vaccineName.trim(),
-                description: description ? description.trim() : "",
                 manufacturer: origin.trim(),
-                dosage: instructions ? instructions.trim() : "",
-                contraindications: contraindications ? contraindications.trim() : "",
-                precautions: precautions ? precautions.trim() : "",
-                interactions: interactions ? interactions.trim() : "",
-                adverseReactions: sideEffects ? sideEffects.trim() : "",
-                storageConditions: storageInstructions ? storageInstructions.trim() : "",
-                recommended: targetGroups ? targetGroups.trim() : "",
-                preVaccination: schedule ? schedule.trim() : "",
-                compatibility: postVaccinationReactions ? postVaccinationReactions.trim() : "",
                 quantity: Math.max(1, parseInt(quantity, 10)),
                 expirationDate: expiryDate,
                 productionDate: productionDate,
-                status: status === "Active" ? "true" : "false",
                 categoryName: vaccineType,
-                imagineUrl: vaccineImage // Add the image file directly
-            };
-
-            console.log('Saving vaccine data:', vaccineData);
-            console.log('Image file:', vaccineImage);
+                price: price,
+                hasImage: !!vaccineImage,
+                imageName: vaccineImage ? vaccineImage.name : null
+            });
 
             if (isEditing) {
-                await vaccineService.updateVaccine(editingId, vaccineData);
+                await vaccineService.updateVaccine(editingId, formData);
                 toast.success("Vaccine updated successfully!");
             } else {
-                await vaccineService.addVaccine(vaccineData);
+                await vaccineService.addVaccine(formData);
                 toast.success("Vaccine added successfully!");
             }
             
@@ -299,37 +337,18 @@ function VaccineManage() {
     };
 
     return (
-        <>
-            <Sidebar />
-            <Container>
-                <h1>Vaccine Management</h1>
-                
-                {/* Search Bar */}
-                <Row className="mb-3">
-                    <Col md={6}>
-                        <Form.Group className="d-flex">
-                            <Form.Control
-                                type="text"
-                                placeholder="Search vaccines..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                            />
-                            <Button variant="primary" onClick={handleSearch} className="ms-2">
-                                Search
-                            </Button>
-                        </Form.Group>
-                    </Col>
-                    <Col md={6} className="text-end">
-                        <Button variant="primary" onClick={handleShow}>
-                            Add New Vaccine
-                        </Button>
-                    </Col>
-                </Row>
+        <AdminLayout>
+            <Container fluid>
+                <div className="d-flex justify-content-between align-items-center mb-4">
+                    <h1>Vaccine Management</h1>
+                    <Button variant="primary" onClick={() => handleShow()}>
+                        Add New Vaccine
+                    </Button>
+                </div>
 
-                {loading ? (
-                    <div className="text-center">Loading...</div>
-                ) : (
+                {loading && <Alert variant="info">Loading vaccines...</Alert>}
+
+                <div className="table-responsive">
                     <Table striped bordered hover>
                         <thead>
                             <tr>
@@ -338,6 +357,7 @@ function VaccineManage() {
                                 <th>Type</th>
                                 <th>Manufacturer</th>
                                 <th>Quantity</th>
+                                <th>Price</th>
                                 <th>Production Date</th>
                                 <th>Expiry Date</th>
                                 <th>Status</th>
@@ -352,20 +372,33 @@ function VaccineManage() {
                                             <img
                                                 src={`http://localhost:8080/api/vaccines/images/${vaccine.imagineUrl}`}
                                                 alt={vaccine.name}
-                                                style={{ width: '50px', height: '50px', objectFit: 'cover' }}
+                                                style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px' }}
                                                 onError={(e) => {
-                                                    e.target.onerror = null; // Prevent infinite loop
+                                                    console.error('Image load error for:', vaccine.imagineUrl);
                                                     e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjUwIiBoZWlnaHQ9IjUwIiBmaWxsPSIjZWVlIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtc2l6ZT0iMTIiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGFsaWdubWVudC1iYXNlbGluZT0ibWlkZGxlIiBmaWxsPSIjYWFhIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4=';
                                                 }}
                                             />
                                         ) : (
-                                            'No image'
+                                            <div style={{ 
+                                                width: '50px', 
+                                                height: '50px', 
+                                                background: '#eee',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                borderRadius: '4px',
+                                                color: '#aaa',
+                                                fontSize: '10px'
+                                            }}>
+                                                No Image
+                                            </div>
                                         )}
                                     </td>
                                     <td>{vaccine.name}</td>
                                     <td>{vaccine.categoryName || 'N/A'}</td>
                                     <td>{vaccine.manufacturer}</td>
                                     <td>{vaccine.quantity}</td>
+                                    <td>{vaccine.price ? Number(vaccine.price).toLocaleString('de-DE') : '0'}</td>
                                     <td>{vaccine.productionDate}</td>
                                     <td>{vaccine.expirationDate}</td>
                                     <td>{vaccine.status === "true" ? "Active" : "Inactive"}</td>
@@ -381,7 +414,7 @@ function VaccineManage() {
                             ))}
                         </tbody>
                     </Table>
-                )}
+                </div>
 
                 <Modal show={show} onHide={handleClose} size="lg">
                     <Modal.Header closeButton>
@@ -577,6 +610,20 @@ function VaccineManage() {
                                     />
                                      <Form.Control.Feedback type="invalid">{errors.quantity}</Form.Control.Feedback>
                                 </Form.Group>
+
+                                <Form.Group as={Col} controlId="formGridPrice">
+                                    <Form.Label>Price *</Form.Label>
+                                    <Form.Control
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="Enter Price"
+                                        value={price}
+                                        onChange={(e) => setPrice(e.target.value)}
+                                        isInvalid={!!errors.price}
+                                        aria-label="Price"
+                                    />
+                                    <Form.Control.Feedback type="invalid">{errors.price}</Form.Control.Feedback>
+                                </Form.Group>
                             </Row>
                             <Row className="mb-3">
                                     <Form.Group as={Col} controlId="formGridStatus">
@@ -675,7 +722,7 @@ function VaccineManage() {
                     </Modal.Footer>
                 </Modal>
             </Container>
-        </>
+        </AdminLayout>
     );
 }
 

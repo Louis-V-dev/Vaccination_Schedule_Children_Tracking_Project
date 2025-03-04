@@ -1,11 +1,12 @@
 import React from 'react';
-import { Container, Row, Col, Button, Navbar, Nav } from 'react-bootstrap';
+import NavBar from '../components/NavBar';
+import { Container, Row, Col, Button } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { FaSyringe, FaCalendarAlt, FaBell, FaUserMd, FaChartLine, FaShieldAlt, FaSignOutAlt } from 'react-icons/fa';
 import '../css/HomePage.css';
 import authService from '../services/authService';
 
-function HomePage() {
+const HomePage = () => {
 	const isLoggedIn = authService.isAuthenticated();
 
 	const handleLogout = () => {
@@ -14,33 +15,7 @@ function HomePage() {
 
 	return (
 		<div className="home-page">
-			{/* Navigation */}
-			<Navbar expand="lg" fixed="top">
-				<Container>
-					<Navbar.Brand href="/">VaccineCare</Navbar.Brand>
-					<Navbar.Toggle aria-controls="basic-navbar-nav" />
-					<Navbar.Collapse id="basic-navbar-nav">
-						<Nav className="ms-auto">
-							<Nav.Link href="#features">Features</Nav.Link>
-							<Nav.Link href="#about">About</Nav.Link>
-							<Nav.Link href="#contact">Contact</Nav.Link>
-							{isLoggedIn ? (
-								<>
-									<Nav.Link as={Link} to="/appointments">My Appointments</Nav.Link>
-									<Nav.Link onClick={handleLogout}>
-										<FaSignOutAlt /> Logout
-									</Nav.Link>
-								</>
-							) : (
-								<>
-									<Nav.Link as={Link} to="/login">Login</Nav.Link>
-									<Nav.Link as={Link} to="/register">Register</Nav.Link>
-								</>
-							)}
-						</Nav>
-					</Navbar.Collapse>
-				</Container>
-			</Navbar>
+			<NavBar />
 
 			{/* Hero Section */}
 			<section className="hero-section">
@@ -155,6 +130,6 @@ function HomePage() {
 			</section>
 		</div>
 	);
-}
+};
 
 export default HomePage;

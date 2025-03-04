@@ -7,6 +7,7 @@ import com.nimbusds.jwt.JWTClaimsSet;
 //import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.config.JwtConfig;
 import com.nimbusds.jwt.SignedJWT;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.controller.AuthenticationController;
+import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.Account;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.exception.AppException;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.exception.ErrorCode;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.model.request.account.AuthenticationRequest;
@@ -28,6 +29,8 @@ import java.text.ParseException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -43,21 +46,22 @@ public class AuthenticationService {
     public AuthenticationResponse authenticate(AuthenticationRequest request) {
         PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
 
-        var account = userRepo.findByUsername(request.getUsername()).orElseThrow(() -> new AppException(ErrorCode.USERNAME_NOT_EXIT));
+        var account = userRepo.findByUsername(request.getUsername())
+            .orElseThrow(() -> new AppException(ErrorCode.USERNAME_NOT_EXIT));
 
-         boolean authenticated = passwordEncoder.matches(request.getPassword(), account.getPassword());
+        boolean authenticated = passwordEncoder.matches(request.getPassword(), account.getPassword());
 
-    if(!authenticated) {
-        throw new AppException(ErrorCode.UNAUTHENTICATED);
-    }
+        if(!authenticated) {
+            throw new AppException(ErrorCode.UNAUTHENTICATED);
+        }
 
-        var token = generateToken(account.getUsername());
+        var token = generateToken(account);
 
         return AuthenticationResponse.builder()
-                .token(token).authenticated(authenticated)
+                .token(token)
+                .authenticated(authenticated)
                 .build();
     }
-
 
     public IntrospectResponse introspect(IntrospectRequest request) throws JOSEException, ParseException {
         var token = request.getToken();
@@ -73,25 +77,26 @@ public class AuthenticationService {
         return IntrospectResponse.builder()
                 .valid(verifed && expiryTime.after(new Date()))
                 .build();
-
     }
 
-
-    private String generateToken(String username){
+    private String generateToken(Account account) {
         JWSHeader header = new JWSHeader(JWSAlgorithm.HS512);
 
-        //Data trong body (Payload của JWT gọi là Claim, tập hợp 1 chuỗi thành 1 Set)
+        Set<String> roles = account.getRoles().stream()
+            .map(role -> role.getRole_Name())
+            .collect(Collectors.toSet());
+
         JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
-                .subject(username)
+                .subject(account.getUsername())
                 .issuer("swp_group3.com")
                 .issueTime(new Date())
                 .expirationTime(new Date(Instant.now().plus(1, ChronoUnit.HOURS).toEpochMilli()))
-                .claim("customeClain", "Custom")
+                .claim("roles", roles)
                 .build();
 
         Payload payload = new Payload(claimsSet.toJSONObject());
 
-        JWSObject jwsObject = new JWSObject(header,payload);
+        JWSObject jwsObject = new JWSObject(header, payload);
 
         try {
             jwsObject.sign(new MACSigner(SIGNER_KEY.getBytes()));
@@ -101,5 +106,4 @@ public class AuthenticationService {
             throw new RuntimeException(e);
         }
     }
-
 }

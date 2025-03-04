@@ -12,10 +12,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
+@Transactional
 public class UserService {
 
     @Autowired
@@ -24,101 +26,53 @@ public class UserService {
     @Autowired
     private UserMapper userMapper;
 
-    public Account createAccount(UserRequest request){
+    public Account createAccount(UserRequest request) {
+        if (request == null) {
+            throw new AppException(ErrorCode.INVALID_REQUEST);
+        }
 
-        if(userRepo.existsByUsername(request.getUsername())){
+        if (userRepo.existsByUsername(request.getUsername())) {
             throw new AppException(ErrorCode.USER_ALREADY_EXIST);
         }
 
         PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
-
-//        Account account = new Account();
         Account account = userMapper.toCreateUser(request);
-//        account.setUsername(request.getUsername());
+        
+        if (account == null) {
+            throw new AppException(ErrorCode.INVALID_REQUEST);
+        }
+
         account.setPassword(passwordEncoder.encode(request.getPassword()));
-//        account.setPassword(request.getPassword());
-//        account.setFirstName(request.getFirst_Name());
-//        account.setLastName(request.getLast_Name());
-//        account.setEmail(request.getEmail());
-//        account.setPhone_number(request.getPhone_number());
-//        account.setAddress(request.getAddress());
-//        account.setGender(request.getGender());
-//        account.setUrlimage(request.getUrl_image());
         account.setStatus(true);
+        
         return userRepo.save(account);
-//        Account account = new Account();
-//        account.setUsername(request.getUsername());
-//        account.setPassword(request.getPassword());
-//        account.setFirst_Name(request.getFirst_Name());
-//        account.setLast_Name(request.getLast_Name());
-//        account.setEmail(request.getEmail());
-//        account.setPhone_number(request.getPhone_number());
-//        account.setAddress(request.getAddress());
-//        account.setGender(request.getGender());
-//        account.setUrl_image(request.getUrl_image());
-//        account.setStatus(true);
-//        return userRepo.save(account);
     }
 
-    public  Account updateAccount(UserUpdate account, String account_id){
-        Account accountID =  userRepo.findById(account_id).orElseThrow(() -> new AppException(
-                ErrorCode.USER_NOT_FOUND
-        ));
+    public Account updateAccount(UserUpdate request, String accountId) {
+        if (request == null || accountId == null) {
+            throw new AppException(ErrorCode.INVALID_REQUEST);
+        }
 
-         accountID = userMapper.toUpdateUser(account);
+        Account account = userRepo.findById(accountId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
-        return userRepo.save(accountID);
+        userMapper.toUpdateUser(request, account);
+        return userRepo.save(account);
     }
 
-    public List<AccountResponse> getAllAccount(){
-        List<AccountResponse> accounts = userMapper.toAllAccountResponse(userRepo.findAll());
-          if (accounts !=null){
-              return userMapper.toAllAccountResponse(userRepo.findAll());
-            }else {
-              throw new AppException(ErrorCode.EMPTY_USER);
-          }
+    public List<AccountResponse> getAllAccount() {
+        List<Account> accounts = userRepo.findAll();
+        
+        if (accounts == null || accounts.isEmpty()) {
+            throw new AppException(ErrorCode.EMPTY_USER);
+        }
+
+        List<AccountResponse> responses = userMapper.toAllAccountResponse(accounts);
+        
+        if (responses == null || responses.isEmpty()) {
+            throw new AppException(ErrorCode.MAPPING_ERROR);
+        }
+
+        return responses;
     }
-
-
-//    private Account toUser(UserUpdate account, Account accountID){
-//            // Update password only if provided and not empty
-//            if (account.getPassword() != null && !account.getPassword().isEmpty()) {
-//                accountID.setPassword(account.getPassword());
-//            }
-//
-//            // Update other fields only if they are not null
-//            if (account.getFirst_Name() != null) {
-//                accountID.setFirstName(account.getFirst_Name());
-//            }
-//            if (account.getLast_Name() != null) {
-//                accountID.setLastName(account.getLast_Name());
-//            }
-//            if (account.getEmail() != null) {
-//                accountID.setEmail(account.getEmail());
-//            }
-//            if (account.getPhone_number() != null) {
-//                accountID.setPhoneNumber(account.getPhone_number());
-//            }
-//            if (account.getAddress() != null) {
-//                accountID.setAddress(account.getAddress());
-//            }
-//            if (account.getGender() != null) {
-//                accountID.setGender(account.getGender());
-//            }
-//            if (account.getUrl_image() != null) {
-//                accountID.setUrlImage(account.getUrl_image());
-//            }
-//
-//            accountID.setStatus(account.isStatus());
-//
-//            return accountID;
-//
-//    }
-
-//    public Account deactiveAccount(String id,  UserUpdate account){
-//        Account accountID =  userRepo.findById(id).orElseThrow(() -> new EntityNotFoundException("Account not found"));
-//
-//        return userRepo.save(toUser(account, accountID));
-//
-//    }
 }

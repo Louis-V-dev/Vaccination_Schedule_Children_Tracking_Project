@@ -35,6 +35,7 @@ public class VaccineService {
     public Vaccine addVaccine(VaccineRequest request, MultipartFile imageFile, String categoryName) {
         System.out.println("Adding vaccine with category name: " + categoryName);
         System.out.println("Image file received: " + (imageFile != null ? imageFile.getOriginalFilename() : "null"));
+        System.out.println("Price received: " + request.getPrice());
         
         Vaccine vaccine = new Vaccine();
         vaccine.setName(request.getName());
@@ -53,6 +54,7 @@ public class VaccineService {
         vaccine.setExpirationDate(request.getExpirationDate());
         vaccine.setProductionDate(request.getProductionDate());
         vaccine.setStatus("true");
+        vaccine.setPrice(request.getPrice());
 
         // Handle category using VacineCategoryService
         if (categoryName != null && !categoryName.trim().isEmpty()) {
@@ -144,6 +146,7 @@ public class VaccineService {
         Vaccine vaccine = vaccineRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Vaccine not found with id: " + id));
         
+        System.out.println("Updating vaccine with price: " + request.getPrice());
         vaccine.setName(request.getName());
         vaccine.setDescription(request.getDescription());
         vaccine.setManufacturer(request.getManufacturer());
@@ -160,6 +163,7 @@ public class VaccineService {
         vaccine.setExpirationDate(request.getExpirationDate());
         vaccine.setProductionDate(request.getProductionDate());
         vaccine.setStatus("true");
+        vaccine.setPrice(request.getPrice());
 
         // Handle category using VacineCategoryService
         if (categoryName != null && !categoryName.trim().isEmpty()) {

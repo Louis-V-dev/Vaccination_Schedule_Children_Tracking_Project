@@ -1,12 +1,13 @@
-import React from "react";
-import Navigation from "../components/Navbar";
+import React from 'react';
+import NavBar from '../components/NavBar';
 
-function AboutUsPage() {
+const AboutUsPage = () => {
 	return (
 		<div>
-			<Navigation />
-			AboutUsPage
+			<NavBar />
+			{/* Rest of your about us content */}
 		</div>
 	);
-}
+};
+
 export default AboutUsPage;

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8080/api/accounts';
+const API_URL = 'http://localhost:8080/api/users';
 
 // Mock data for development
 const MOCK_ACCOUNTS = [
@@ -56,33 +56,40 @@ const accountService = {
       const headers = getAuthHeaders();
       console.log('Fetching accounts with headers:', headers);
       
-      // Check if the vaccineService is working to compare approaches
-      const vaccineUrl = 'http://localhost:8080/api/vaccines';
-      try {
-        const vaccineResponse = await axios.get(vaccineUrl, { headers });
-        console.log('Vaccine API works with same token:', vaccineResponse.status);
-      } catch (vaccineError) {
-        console.log('Vaccine API also fails:', vaccineError.response?.status);
+      const response = await axios.get(API_URL, { 
+        headers: {
+          ...headers,
+          'Accept': 'application/json'
+        }
+      });
+
+      // Check if we have a valid response with data
+      if (response.data && response.data.result) {
+        return response.data.result.map(account => ({
+          id: account.accountId,
+          username: account.username,
+          email: account.email,
+          fullName: `${account.firstName || ''} ${account.lastName || ''}`.trim(),
+          role: Array.isArray(account.roles) && account.roles.length > 0 ? account.roles[0] : 'USER',
+          status: account.status ? 'ACTIVE' : 'INACTIVE'
+        }));
       }
       
-      try {
-        // Try with different content types
-        const response = await axios.get(API_URL, { 
-          headers: {
-            ...headers,
-            'Accept': 'application/json'
-          }
-        });
-        return response.data;
-      } catch (apiError) {
-        console.error('API error, using mock data:', apiError.response?.data || apiError);
-        console.log('Using mock data as fallback');
-        return MOCK_ACCOUNTS;
-      }
+      // If we get here, we have a response but no data
+      console.error('Invalid response format:', response.data);
+      throw new Error('Invalid response format from server');
     } catch (error) {
       console.error('Error fetching accounts:', error.response?.data || error);
-      // Return mock data instead of empty array
-      console.log('Using mock data as fallback');
+      
+      // Handle specific error cases
+      if (error.response?.status === 403) {
+        throw new Error('You do not have permission to view accounts');
+      } else if (error.response?.status === 401) {
+        throw new Error('Please log in to view accounts');
+      }
+      
+      // For other errors, return mock data
+      console.warn('Using mock data as fallback');
       return MOCK_ACCOUNTS;
     }
   },
@@ -105,37 +112,47 @@ const accountService = {
   // Create new account
   createAccount: async (accountData) => {
     try {
-      const response = await axios.post(API_URL, accountData, {
+      // Transform frontend data to backend format
+      const backendData = {
+        username: accountData.username,
+        password: accountData.password,
+        firstName: accountData.fullName.split(' ').slice(0, -1).join(' '),
+        lastName: accountData.fullName.split(' ').slice(-1)[0],
+        email: accountData.email,
+        status: accountData.status === 'ACTIVE'
+      };
+
+      const response = await axios.post(API_URL, backendData, {
         headers: getAuthHeaders()
       });
       return response.data;
     } catch (error) {
       console.error('Error creating account:', error.response?.data || error);
-      // Simulate successful creation with mock data
-      const newAccount = {
-        ...accountData,
-        id: Math.floor(Math.random() * 1000) + 10
-      };
-      MOCK_ACCOUNTS.push(newAccount);
-      return newAccount;
+      throw error;
     }
   },
 
   // Update account
   updateAccount: async (id, accountData) => {
     try {
-      const response = await axios.put(`${API_URL}/${id}`, accountData, {
+      // Transform frontend data to backend format
+      const backendData = {
+        firstName: accountData.fullName.split(' ').slice(0, -1).join(' '),
+        lastName: accountData.fullName.split(' ').slice(-1)[0],
+        email: accountData.email,
+        status: accountData.status === 'ACTIVE'
+      };
+
+      if (accountData.password) {
+        backendData.password = accountData.password;
+      }
+
+      const response = await axios.patch(`${API_URL}/${id}`, backendData, {
         headers: getAuthHeaders()
       });
       return response.data;
     } catch (error) {
       console.error('Error updating account:', error.response?.data || error);
-      // Simulate successful update with mock data
-      const index = MOCK_ACCOUNTS.findIndex(acc => acc.id === parseInt(id));
-      if (index !== -1) {
-        MOCK_ACCOUNTS[index] = { ...MOCK_ACCOUNTS[index], ...accountData };
-        return MOCK_ACCOUNTS[index];
-      }
       throw error;
     }
   },
@@ -149,12 +166,6 @@ const accountService = {
       return response.data;
     } catch (error) {
       console.error('Error deleting account:', error.response?.data || error);
-      // Simulate successful deletion with mock data
-      const index = MOCK_ACCOUNTS.findIndex(acc => acc.id === parseInt(id));
-      if (index !== -1) {
-        MOCK_ACCOUNTS.splice(index, 1);
-        return { success: true };
-      }
       throw error;
     }
   }

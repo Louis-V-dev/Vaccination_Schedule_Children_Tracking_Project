@@ -1,12 +1,11 @@
 import React from "react";
-import Navigation from "../components/Navbar";
+import NavBar from "../components/NavBar";
 import { Container, Table } from "react-bootstrap";
 
-function PriceListPage() {
+const PriceListPage = () => {
 	return (
 		<div>
-			<Navigation />
-			<br />
+			<NavBar />
 			<Container>
 				<h2>Vaccination price list and payment methods:</h2>
 				<br />
@@ -55,6 +54,6 @@ function PriceListPage() {
 			</Container>
 		</div>
 	);
-}
+};
 
 export default PriceListPage;

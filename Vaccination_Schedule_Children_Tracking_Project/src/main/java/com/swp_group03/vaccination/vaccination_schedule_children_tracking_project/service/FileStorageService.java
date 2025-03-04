@@ -1,6 +1,5 @@
 package com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.service;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -17,17 +16,20 @@ public class FileStorageService {
     private final Path fileStorageLocation;
 
     public FileStorageService() {
-        // Create the directory inside the backend project
+        // Get the project directory
         String projectDir = System.getProperty("user.dir");
-        // Navigate to the backend project directory if we're in the parent directory
         if (projectDir.endsWith("SWP")) {
             projectDir = Paths.get(projectDir, "Vaccination_Schedule_Children_Tracking_Project").toString();
         }
-        this.fileStorageLocation = Paths.get(projectDir, "src", "main", "resources", "VaccineImg").toAbsolutePath().normalize();
+        
+        // Use the same directory as configured in WebConfig
+        this.fileStorageLocation = Paths.get(projectDir, "vaccine-images").toAbsolutePath().normalize();
         try {
             Files.createDirectories(this.fileStorageLocation);
             System.out.println("Image storage location: " + this.fileStorageLocation);
         } catch (IOException ex) {
+            System.err.println("Failed to create directory at: " + this.fileStorageLocation);
+            ex.printStackTrace();
             throw new RuntimeException("Could not create the directory where the uploaded files will be stored.", ex);
         }
     }
@@ -43,7 +45,15 @@ public class FileStorageService {
             String originalFileName = file.getOriginalFilename();
             System.out.println("Original filename: " + originalFileName);
             
-            String fileExtension = originalFileName.substring(originalFileName.lastIndexOf("."));
+            if (originalFileName == null || !originalFileName.contains(".")) {
+                throw new RuntimeException("Invalid file format");
+            }
+            
+            String fileExtension = originalFileName.substring(originalFileName.lastIndexOf(".")).toLowerCase();
+            if (!isValidImageExtension(fileExtension)) {
+                throw new RuntimeException("Invalid image format. Supported formats: .jpg, .jpeg, .png, .gif, .webp");
+            }
+            
             String fileName = UUID.randomUUID().toString() + fileExtension;
             System.out.println("Generated filename: " + fileName);
 
@@ -52,7 +62,7 @@ public class FileStorageService {
             System.out.println("Saving file to: " + targetLocation.toString());
             
             Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
-            System.out.println("File saved successfully");
+            System.out.println("File saved successfully to: " + targetLocation.toString());
 
             return fileName;
         } catch (IOException ex) {
@@ -62,10 +72,29 @@ public class FileStorageService {
         }
     }
 
+    private boolean isValidImageExtension(String extension) {
+        return extension.equals(".jpg") || 
+               extension.equals(".jpeg") || 
+               extension.equals(".png") || 
+               extension.equals(".gif") || 
+               extension.equals(".webp");
+    }
+
     public Path getFilePath(String fileName) {
-        Path path = this.fileStorageLocation.resolve(fileName).normalize();
-        System.out.println("Retrieving file from: " + path.toString());
-        return path;
+        try {
+            Path path = this.fileStorageLocation.resolve(fileName).normalize();
+            if (!path.startsWith(this.fileStorageLocation)) {
+                throw new RuntimeException("Cannot access file outside of storage location");
+            }
+            System.out.println("Retrieving file from: " + path.toString());
+            if (!Files.exists(path)) {
+                throw new RuntimeException("File not found: " + fileName);
+            }
+            return path;
+        } catch (Exception e) {
+            System.err.println("Error accessing file: " + fileName + " - " + e.getMessage());
+            throw new RuntimeException("Could not access file: " + fileName, e);
+        }
     }
 
     public void deleteFile(String fileName) {
@@ -73,7 +102,10 @@ public class FileStorageService {
             if (fileName == null) {
                 return;
             }
-            Path targetLocation = this.fileStorageLocation.resolve(fileName);
+            Path targetLocation = this.fileStorageLocation.resolve(fileName).normalize();
+            if (!targetLocation.startsWith(this.fileStorageLocation)) {
+                throw new RuntimeException("Cannot delete file outside of storage location");
+            }
             System.out.println("Attempting to delete file: " + targetLocation.toString());
             if (Files.deleteIfExists(targetLocation)) {
                 System.out.println("File deleted successfully");

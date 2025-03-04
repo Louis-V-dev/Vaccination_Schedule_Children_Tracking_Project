@@ -7,7 +7,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPAge";
 import AccountManage from "./admin/AccountManage";
 import VaccineManage from "./admin/VaccineManage";
-import ComboManage from "./admin/ComboManage";
+import VaccineComboManage from "./admin/VaccineComboManage";
 
 function App() {
 	return (
@@ -21,7 +21,7 @@ function App() {
 			{/*Admin page*/}
 			<Route path={"/ManageAccount"} element={<AccountManage />} />
 			<Route path={"/ManageVaccine"} element={<VaccineManage />} />
-			<Route path={"/ManageCombo"} element={<ComboManage />} />
+			<Route path={"/ManageCombo"} element={<VaccineComboManage />} />
 		</Routes>
 	);
 }
