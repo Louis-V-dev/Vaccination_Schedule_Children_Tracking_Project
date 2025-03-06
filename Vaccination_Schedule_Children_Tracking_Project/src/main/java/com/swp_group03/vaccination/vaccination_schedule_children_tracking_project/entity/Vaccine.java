@@ -8,6 +8,8 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 @Getter
 @Setter
@@ -92,4 +94,18 @@ public class Vaccine {
     @Column(name = "ProductionDate")
     private LocalDate productionDate;
 
+    @OneToMany(mappedBy = "vaccine", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<DoseInterval> doseIntervals = new ArrayList<>();
+    
+    // Helper method to add dose interval
+    public void addDoseInterval(DoseInterval doseInterval) {
+        doseIntervals.add(doseInterval);
+        doseInterval.setVaccine(this);
+    }
+    
+    // Helper method to remove dose interval
+    public void removeDoseInterval(DoseInterval doseInterval) {
+        doseIntervals.remove(doseInterval);
+        doseInterval.setVaccine(null);
+    }
 }

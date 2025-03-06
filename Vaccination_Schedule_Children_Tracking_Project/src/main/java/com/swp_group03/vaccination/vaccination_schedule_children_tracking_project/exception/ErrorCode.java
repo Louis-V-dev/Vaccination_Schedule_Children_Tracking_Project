@@ -14,6 +14,13 @@ public enum ErrorCode {
     MAPPING_ERROR(1005, "Error mapping data between entities"),
     COMBO_NOT_FOUND(1006, "Vaccine combo not found"),
     COMBO_NAME_EXISTS(1007, "Vaccine combo name already exists"),
+    
+    // Dose Interval errors
+    VACCINE_NOT_FOUND(1008, "Vaccine not found"),
+    INTERVAL_NOT_FOUND(1009, "Interval not found"),
+    INTERVAL_OVERLAP(1010, "Interval overlaps with existing interval"),
+    INVALID_DOSE_RANGE(1011, "From dose cannot be greater than to dose"),
+    INTERVAL_VACCINE_MISMATCH(1012, "Interval does not belong to the specified vaccine"),
 
     //Check-Input
     INVALID_KEY(2000, "Invalid message key"),

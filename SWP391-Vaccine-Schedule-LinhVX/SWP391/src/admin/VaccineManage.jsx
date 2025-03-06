@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { Button, Col, Container, Form, Modal, Row, Table, Alert } from "react-bootstrap";
+import { Button, Col, Container, Form, Modal, Row, Table, Alert, InputGroup } from "react-bootstrap";
 import Sidebar from "../components/Sidebar"; // Assuming Sidebar is correctly implemented
 import vaccineService from "../services/vaccineService";
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import axios from "axios";
 import AdminLayout from './AdminLayout';
+import DoseIntervalForm from './DoseIntervalForm';
+import { createInterval, deleteAllIntervalsForVaccine, getIntervalsForVaccine, createIntervalsWithRetry, createMultipleIntervals } from '../services/doseIntervalService';
 
 // Get auth header function
 const getAuthHeader = () => {
@@ -51,6 +53,17 @@ function VaccineManage() {
 
     const [isEditing, setIsEditing] = useState(false);
     const [editingId, setEditingId] = useState(null);
+
+    // Add this state variable
+    const [showIntervalModal, setShowIntervalModal] = useState(false);
+    const [selectedVaccineId, setSelectedVaccineId] = useState(null);
+
+    const [totalDoses, setTotalDoses] = useState(1); // Total number of doses
+    const [intervalDays, setIntervalDays] = useState([]); // Array of interval days between doses
+    const [intervalUnits, setIntervalUnits] = useState({});
+
+    // Add this state variable
+    const [hasExistingIntervals, setHasExistingIntervals] = useState(false);
 
     // Fetch vaccines and categories on component mount
     useEffect(() => {
@@ -126,9 +139,11 @@ function VaccineManage() {
 
     const handleClose = () => {
         setShow(false);
+        setShowCategoryModal(false);
         clearForm();
         setIsEditing(false);
         setEditingId(null);
+        setHasExistingIntervals(false);
     };
     const handleShow = () => setShow(true);
 
@@ -145,24 +160,45 @@ function VaccineManage() {
         setTargetGroups("");
         setSchedule("");
         setPostVaccinationReactions("");
-        setProductionDate("");
-        setVaccineImage(null);
         setQuantity("");
         setExpiryDate("");
+        setProductionDate("");
         setStatus("Active");
         setVaccineType("");
-        setPrice(""); // Clear price
+        setPrice("");
+        setVaccineImage(null);
         setNewCategoryName("");
         setErrors({});
+        setTotalDoses(1);
+        setIntervalDays([]);
+        setIntervalUnits({});
     };
 
     const handleEdit = (vaccine) => {
         setIsEditing(true);
         setEditingId(vaccine.id);
-        setVaccineName(vaccine.name);
+        setVaccineName(vaccine.name || "");
         setDescription(vaccine.description || "");
-        setOrigin(vaccine.manufacturer);
-        setInstructions(vaccine.dosage || "");
+        setOrigin(vaccine.manufacturer || "");
+        
+        // Extract total doses from dosage field if possible
+        const dosageMatch = vaccine.dosage ? vaccine.dosage.match(/(\d+)\s*dose/) : null;
+        const doses = dosageMatch ? parseInt(dosageMatch[1]) : 1;
+        setTotalDoses(doses);
+        
+        // Initialize interval days array and units
+        const initialIntervalDays = Array(doses - 1).fill(28);
+        setIntervalDays(initialIntervalDays);
+        
+        // Initialize interval units as days by default
+        const initialUnits = {};
+        for (let i = 1; i < doses; i++) {
+            initialUnits[i] = 'days';
+        }
+        setIntervalUnits(initialUnits);
+        
+        // Don't set instructions to dosage, as we're using dosage for total doses
+        setInstructions("");
         setContraindications(vaccine.contraindications || "");
         setPrecautions(vaccine.precautions || "");
         setInteractions(vaccine.interactions || "");
@@ -172,12 +208,52 @@ function VaccineManage() {
         setSchedule(vaccine.preVaccination || "");
         setPostVaccinationReactions(vaccine.compatibility || "");
         setQuantity(vaccine.quantity?.toString() || "");
-        setExpiryDate(vaccine.expirationDate || "");
-        setProductionDate(vaccine.productionDate || "");
+        setExpiryDate(vaccine.expirationDate ? vaccine.expirationDate.split('T')[0] : "");
+        setProductionDate(vaccine.productionDate ? vaccine.productionDate.split('T')[0] : "");
         setStatus(vaccine.status === "true" ? "Active" : "Inactive");
         setVaccineType(vaccine.categoryName || "");
-        setPrice(vaccine.price?.toString() || ""); // Set price
+        setPrice(vaccine.price?.toString() || "");
+        
         setShow(true);
+        
+        // If editing and there are multiple doses, fetch the intervals
+        if (doses > 1) {
+            fetchIntervalsForVaccine(vaccine.id);
+        }
+    };
+
+    const fetchIntervalsForVaccine = async (vaccineId) => {
+        try {
+            const intervals = await getIntervalsForVaccine(vaccineId);
+            console.log('Fetched intervals:', intervals);
+            
+            if (intervals && intervals.length > 0) {
+                // Set flag that this vaccine has existing intervals
+                setHasExistingIntervals(true);
+                
+                // Sort intervals by fromDose to ensure correct order
+                intervals.sort((a, b) => a.fromDose - b.fromDose);
+                
+                // Create a new array with the correct interval days
+                const newIntervalDays = [];
+                for (let i = 0; i < intervals.length; i++) {
+                    const interval = intervals[i];
+                    // Make sure the interval is for consecutive doses
+                    if (interval.fromDose === i + 1 && interval.toDose === i + 2) {
+                        newIntervalDays[i] = interval.intervalDays;
+                    }
+                }
+                
+                // Update the interval days state
+                setIntervalDays(newIntervalDays);
+            } else {
+                setHasExistingIntervals(false);
+            }
+        } catch (error) {
+            console.error('Error fetching intervals:', error);
+            toast.error('Failed to load dose intervals. Using default values.');
+            setHasExistingIntervals(false);
+        }
     };
 
     const handleImageChange = (e) => {
@@ -185,6 +261,62 @@ function VaccineManage() {
             const file = e.target.files[0];
             console.log('Selected image file:', file);
             setVaccineImage(file);
+        }
+    };
+
+    const handleTotalDosesChange = (e) => {
+        const newValue = e.target.value === '' ? '' : parseInt(e.target.value);
+        setTotalDoses(newValue);
+        
+        // Update interval days array based on new doses
+        const newIntervalDays = [];
+        const newIntervalUnits = { ...intervalUnits };
+        
+        if (newValue > 1) {
+            for (let i = 1; i < newValue; i++) {
+                // Keep existing values and units if available
+                if (i <= intervalDays.length) {
+                    newIntervalDays.push(intervalDays[i-1]);
+                } else {
+                    newIntervalDays.push(0);
+                    newIntervalUnits[i] = 'days'; // Set default unit for new intervals
+                }
+            }
+            
+            // Remove units for intervals that no longer exist
+            Object.keys(newIntervalUnits).forEach(key => {
+                if (parseInt(key) >= newValue - 1) {
+                    delete newIntervalUnits[key];
+                }
+            });
+        }
+        
+        setIntervalDays(newIntervalDays);
+        setIntervalUnits(newIntervalUnits);
+    };
+
+    const handleIntervalChange = (index, value) => {
+        const newIntervalDays = [...intervalDays];
+        const unit = intervalUnits[index + 1] || 'days';
+        // Convert to days if unit is months
+        const convertedValue = unit === 'months' ? value * 30 : value;
+        newIntervalDays[index] = parseInt(convertedValue) || 0;
+        setIntervalDays(newIntervalDays);
+    };
+
+    const handleUnitChange = (index, unit) => {
+        const newUnits = { ...intervalUnits };
+        const oldUnit = newUnits[index + 1] || 'days';
+        newUnits[index + 1] = unit;
+        setIntervalUnits(newUnits);
+
+        // Convert the value when changing units
+        const currentValue = intervalDays[index];
+        if (currentValue) {
+            const newValue = unit === 'months' ? 
+                Math.round(currentValue / 30) : 
+                currentValue * 30;
+            handleIntervalChange(index, newValue);
         }
     };
 
@@ -196,7 +328,7 @@ function VaccineManage() {
         if (!expiryDate) newErrors.expiryDate = "Expiry Date is required";
         if (!productionDate) newErrors.productionDate = "Production Date is required";
         if (!vaccineType) newErrors.vaccineType = "Vaccine Category is required";
-        if (!price || isNaN(price) || parseFloat(price) < 0) newErrors.price = "Price must be a non-negative number"; // Validate price
+        if (!price || isNaN(price) || parseFloat(price) < 0) newErrors.price = "Price must be a non-negative number";
 
         // Validate production date is before expiry date
         if (productionDate && expiryDate) {
@@ -216,64 +348,101 @@ function VaccineManage() {
             setLoading(true);
             const formData = new FormData();
             
-            // Append all fields individually
+            // Format dates to match backend expectations (YYYY-MM-DD)
+            const formattedProductionDate = new Date(productionDate).toISOString().split('T')[0];
+            const formattedExpiryDate = new Date(expiryDate).toISOString().split('T')[0];
+            
+            // Ensure numeric values are properly formatted
+            const formattedPrice = parseFloat(price).toFixed(2);
+            const formattedQuantity = Math.max(0, parseInt(quantity, 10));
+            
+            // Basic required fields
             formData.append('name', vaccineName.trim());
-            formData.append('description', description ? description.trim() : "");
             formData.append('manufacturer', origin.trim());
-            formData.append('dosage', instructions ? instructions.trim() : "");
-            formData.append('contraindications', contraindications ? contraindications.trim() : "");
-            formData.append('precautions', precautions ? precautions.trim() : "");
-            formData.append('interactions', interactions ? interactions.trim() : "");
-            formData.append('adverseReactions', sideEffects ? sideEffects.trim() : "");
-            formData.append('storageConditions', storageInstructions ? storageInstructions.trim() : "");
-            formData.append('recommended', targetGroups ? targetGroups.trim() : "");
-            formData.append('preVaccination', schedule ? schedule.trim() : "");
-            formData.append('compatibility', postVaccinationReactions ? postVaccinationReactions.trim() : "");
-            formData.append('quantity', Math.max(1, parseInt(quantity, 10)));
-            formData.append('expirationDate', expiryDate);
-            formData.append('productionDate', productionDate);
-            formData.append('status', status === "Active" ? "true" : "false");
+            formData.append('quantity', formattedQuantity);
+            formData.append('expirationDate', formattedExpiryDate);
+            formData.append('productionDate', formattedProductionDate);
+            formData.append('price', formattedPrice);
             formData.append('categoryName', vaccineType);
-            formData.append('price', price ? price : "0"); // Add price to formData
-            
-            // Add image if present
-            if (vaccineImage) {
-                formData.append('imagineUrl', vaccineImage, vaccineImage.name);
+            formData.append('status', status === "Active" ? "true" : "false");
+            formData.append('dosage', `${totalDoses} dose(s)`);
+
+            // Optional fields - only append if they have values
+            if (description?.trim()) formData.append('description', description.trim());
+            if (contraindications?.trim()) formData.append('contraindications', contraindications.trim());
+            if (precautions?.trim()) formData.append('precautions', precautions.trim());
+            if (interactions?.trim()) formData.append('interactions', interactions.trim());
+            if (sideEffects?.trim()) formData.append('adverseReactions', sideEffects.trim());
+            if (storageInstructions?.trim()) formData.append('storageConditions', storageInstructions.trim());
+            if (targetGroups?.trim()) formData.append('recommended', targetGroups.trim());
+            if (schedule?.trim()) formData.append('preVaccination', schedule.trim());
+            if (postVaccinationReactions?.trim()) formData.append('compatibility', postVaccinationReactions.trim());
+
+            // Handle image upload
+            if (vaccineImage instanceof File) {
+                formData.append('imagineUrl', vaccineImage);
             }
 
-            console.log('Saving vaccine with fields:', {
-                name: vaccineName.trim(),
-                manufacturer: origin.trim(),
-                quantity: Math.max(1, parseInt(quantity, 10)),
-                expirationDate: expiryDate,
-                productionDate: productionDate,
-                categoryName: vaccineType,
-                price: price,
-                hasImage: !!vaccineImage,
-                imageName: vaccineImage ? vaccineImage.name : null
-            });
+            // Log the form data for debugging
+            console.log('Sending form data:');
+            for (let [key, value] of formData.entries()) {
+                console.log(`${key}: ${value}`);
+            }
 
+            let response;
+            let savedVaccineData;
+            
             if (isEditing) {
-                await vaccineService.updateVaccine(editingId, formData);
-                toast.success("Vaccine updated successfully!");
+                console.log('Updating vaccine with ID:', editingId);
+                savedVaccineData = await vaccineService.updateVaccine(editingId, formData);
+                console.log('Update response:', savedVaccineData);
             } else {
-                await vaccineService.addVaccine(formData);
-                toast.success("Vaccine added successfully!");
+                console.log('Adding new vaccine');
+                response = await vaccineService.addVaccine(formData);
+                savedVaccineData = response.data;
+                console.log('Add response:', savedVaccineData);
             }
-            
-            fetchVaccines();
-            handleClose();
+
+            if (savedVaccineData) {
+                const savedVaccineId = isEditing ? editingId : savedVaccineData.id;
+                
+                if (savedVaccineId && totalDoses > 1) {
+                    try {
+                        const intervalDataArray = intervalDays.map((days, index) => {
+                            const unit = intervalUnits[index + 1] || 'days';
+                            const convertedDays = unit === 'months' ? days * 30 : days;
+                            return {
+                                fromDose: index + 1,
+                                toDose: index + 2,
+                                intervalDays: convertedDays
+                            };
+                        });
+
+                        await createMultipleIntervals(savedVaccineId, intervalDataArray);
+                    } catch (intervalError) {
+                        console.error('Error saving intervals:', intervalError);
+                        toast.warning("Vaccine saved but there was an issue with intervals");
+                    }
+                }
+
+                toast.success(isEditing ? "Vaccine updated successfully!" : "Vaccine added successfully!");
+                fetchVaccines();
+                handleClose();
+            } else {
+                throw new Error('No response data received');
+            }
         } catch (error) {
             console.error('Error saving vaccine:', error);
-            const errorMessage = error.response?.data?.message || error.message;
             console.error('Error details:', error.response?.data);
-            console.error('Full error object:', error);
             
-            if (error.response?.status === 400) {
-                toast.error("Invalid data. Please check all fields and try again.");
-            } else {
-                toast.error(`Failed to ${isEditing ? 'update' : 'add'} vaccine: ${errorMessage}`);
+            let errorMessage = "Failed to save vaccine";
+            if (error.response?.data?.message) {
+                errorMessage = error.response.data.message;
+            } else if (error.response?.data?.code === 9999) {
+                errorMessage = "Server error. Please check all fields and try again.";
             }
+            
+            toast.error(errorMessage);
         } finally {
             setLoading(false);
         }
@@ -336,14 +505,20 @@ function VaccineManage() {
         }
     };
 
+    // Add this function to handle opening the interval modal
+    const handleManageIntervals = (vaccineId) => {
+        setSelectedVaccineId(vaccineId);
+        setShowIntervalModal(true);
+    };
+
     return (
         <AdminLayout>
             <Container fluid>
                 <div className="d-flex justify-content-between align-items-center mb-4">
-                    <h1>Vaccine Management</h1>
+                <h1>Vaccine Management</h1>
                     <Button variant="primary" onClick={() => handleShow()}>
-                        Add New Vaccine
-                    </Button>
+                            Add New Vaccine
+                        </Button>
                 </div>
 
                 {loading && <Alert variant="info">Loading vaccines...</Alert>}
@@ -409,6 +584,9 @@ function VaccineManage() {
                                         <Button variant="danger" size="sm" onClick={() => handleDelete(vaccine.id)}>
                                             Delete
                                         </Button>
+                                        <Button variant="info" size="sm" onClick={() => handleManageIntervals(vaccine.id)}>
+                                            Manage Intervals
+                                        </Button>
                                     </td>
                                 </tr>
                             ))}
@@ -464,14 +642,14 @@ function VaccineManage() {
 
                             <Row className="mb-3">
                                 <Form.Group as={Col} controlId="formGridInstructions">
-                                    <Form.Label>Instructions</Form.Label>
+                                    <Form.Label>Administration Instructions</Form.Label>
                                     <Form.Control
                                         as="textarea"
                                         rows={3}
-                                        placeholder="Enter Instructions"
+                                        placeholder="Enter Administration Instructions"
                                         value={instructions}
                                         onChange={(e) => setInstructions(e.target.value)}
-                                        aria-label="Instructions"
+                                        aria-label="Administration Instructions"
                                     />
                                 </Form.Group>
 
@@ -640,10 +818,10 @@ function VaccineManage() {
                                      <Form.Group as={Col} controlId="formGridVaccineType">
                                         <Form.Label>Vaccine Category *</Form.Label>
                                         <div className="d-flex">
-                                            <Form.Select
-                                                value={vaccineType}
-                                                onChange={(e) => setVaccineType(e.target.value)}
-                                                isInvalid={!!errors.vaccineType}
+                                        <Form.Select
+                                            value={vaccineType}
+                                            onChange={(e) => setVaccineType(e.target.value)}
+                                            isInvalid={!!errors.vaccineType}
                                                 aria-label="Vaccine Category"
                                                 className="me-2"
                                             >
@@ -653,7 +831,7 @@ function VaccineManage() {
                                                         {category.categoryName}
                                                     </option>
                                                 ))}
-                                            </Form.Select>
+                                        </Form.Select>
                                             <Button variant="outline-primary" onClick={() => setShowCategoryModal(true)}>
                                                 Add New
                                             </Button>
@@ -672,6 +850,67 @@ function VaccineManage() {
 
                                 />
                             </Form.Group>
+
+                            <Row className="mb-3">
+                                <Form.Group className="mb-3" controlId="totalDoses">
+                                    <Form.Label>Total Doses</Form.Label>
+                                    <Form.Control
+                                        type="number"
+                                        min="1"
+                                        value={totalDoses}
+                                        onChange={handleTotalDosesChange}
+                                        isInvalid={!!errors.totalDoses}
+                                        placeholder="Enter number of doses"
+                                    />
+                                    <Form.Control.Feedback type="invalid">
+                                        {errors.totalDoses}
+                                    </Form.Control.Feedback>
+                                    <Form.Text className="text-muted">
+                                        Total number of doses required for this vaccine
+                                    </Form.Text>
+                                </Form.Group>
+                            </Row>
+
+                            {isEditing && hasExistingIntervals && totalDoses > 1 && (
+                                <Alert variant="info" className="mt-2">
+                                    <strong>Note:</strong> This vaccine already has dose intervals. Changing the number of doses or interval days will update the existing intervals.
+                                </Alert>
+                            )}
+
+                            {totalDoses > 1 && (
+                                <div className="mt-3 mb-3">
+                                    <h5>Dose Intervals</h5>
+                                    <p className="text-muted">Specify the time between doses</p>
+                                    {intervalDays.map((days, index) => {
+                                        const unit = intervalUnits[index + 1] || 'days';
+                                        const displayValue = unit === 'months' ? Math.round(days / 30) : days;
+                                        return (
+                                            <Form.Group key={index} className="mb-2">
+                                                <Form.Label>Time between dose {index + 1} and dose {index + 2}</Form.Label>
+                                                <InputGroup>
+                                                    <Form.Control
+                                                        type="number"
+                                                        min="0"
+                                                        value={displayValue}
+                                                        onChange={(e) => handleIntervalChange(index, e.target.value)}
+                                                        isInvalid={!!errors[`interval_${index}`]}
+                                                    />
+                                                    <Form.Select
+                                                        value={unit}
+                                                        onChange={(e) => handleUnitChange(index, e.target.value)}
+                                                    >
+                                                        <option value="days">Days</option>
+                                                        <option value="months">Months</option>
+                                                    </Form.Select>
+                                                    <Form.Control.Feedback type="invalid">
+                                                        {errors[`interval_${index}`]}
+                                                    </Form.Control.Feedback>
+                                                </InputGroup>
+                                            </Form.Group>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </Form>
                     </Modal.Body>
                     <Modal.Footer>
@@ -720,6 +959,25 @@ function VaccineManage() {
                             Add Category
                         </Button>
                     </Modal.Footer>
+                </Modal>
+
+                {/* Add this to the render function, inside the return statement, after the other modals */}
+                <Modal show={showIntervalModal} onHide={() => setShowIntervalModal(false)} size="lg">
+                    <Modal.Header closeButton>
+                        <Modal.Title>Manage Dose Intervals</Modal.Title>
+                    </Modal.Header>
+                    <Modal.Body>
+                        {selectedVaccineId && (
+                            <DoseIntervalForm 
+                                vaccine={vaccines.find(v => v.id === selectedVaccineId)} 
+                                onClose={() => {
+                                    setShowIntervalModal(false);
+                                    setSelectedVaccineId(null);
+                                    fetchVaccines();
+                                }} 
+                            />
+                        )}
+                    </Modal.Body>
                 </Modal>
             </Container>
         </AdminLayout>

@@ -1,16 +1,13 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8080/api/vaccines';
+const API_URL = 'http://localhost:8080/api';
 
 const getAuthHeader = () => {
     const token = localStorage.getItem('token');
     if (!token) {
         throw new Error('No authentication token found');
     }
-    return { 
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json'
-    };
+    return { Authorization: `Bearer ${token}` };
 };
 
 // Add a refresh token function to handle expired tokens
@@ -41,79 +38,110 @@ const refreshTokenIfNeeded = async (error) => {
 };
 
 const vaccineService = {
-    async addVaccine(formData) {
-        const headers = {
-            ...getAuthHeader(),
-            'Content-Type': 'multipart/form-data'
-        };
-        console.log('Headers for add request:', headers);
-        
-        const response = await axios.post(`${API_URL}/add`, formData, { 
-            headers
-        });
-        return response.data;
-    },
-
-    async updateVaccine(id, formData) {
+    // Get all vaccines
+    getAllVaccines: async () => {
         try {
-            const headers = {
-                ...getAuthHeader(),
-                'Content-Type': 'multipart/form-data'
-            };
-            console.log('Headers for update request:', headers);
-            
-            const response = await axios.put(`${API_URL}/${id}`, formData, { 
-                headers,
-                transformRequest: (data) => data // Prevent axios from trying to transform FormData
+            const response = await axios.get(`${API_URL}/vaccines`, {
+                headers: getAuthHeader()
             });
             return response.data;
         } catch (error) {
-            console.error('Update error:', error.response?.data || error);
+            console.error('Error fetching vaccines:', error);
             throw error;
         }
     },
 
-    async getAllVaccines() {
+    // Search vaccines
+    searchVaccines: async (query) => {
         try {
-            const headers = getAuthHeader();
-            console.log('Fetching vaccines with headers:', headers);
-
-            // There is only one valid endpoint in the backend: /api/vaccines
-            try {
-                console.log('Requesting vaccines from:', API_URL);
-                const response = await axios.get(API_URL, {
-                    headers
-                });
-                console.log('Vaccines fetched successfully');
-                return response.data;
-            } catch (error) {
-                console.error('Error details:', error.response?.status, error.response?.data);
-                
-                // Check if it's an auth error
-                if (error.response?.status === 401 || error.response?.status === 403) {
-                    throw new Error('Authentication error: Please log in again');
-                } else {
-                    throw new Error(error.response?.data?.message || error.message || 'Failed to fetch vaccines');
-                }
-            }
+            const response = await axios.get(`${API_URL}/vaccines/search?query=${query}`, {
+                headers: getAuthHeader()
+            });
+            return response.data;
         } catch (error) {
-            console.error('Error fetching vaccines:', error.message);
+            console.error('Error searching vaccines:', error);
             throw error;
         }
     },
 
-    async deleteVaccine(id) {
-        const response = await axios.delete(`${API_URL}/${id}`, {
-            headers: getAuthHeader()
-        });
-        return response.data;
+    // Add a new vaccine
+    addVaccine: async (formData) => {
+        try {
+            const response = await axios.post(
+                `${API_URL}/vaccines`,
+                formData,
+                {
+                    headers: {
+                        ...getAuthHeader(),
+                        'Content-Type': 'multipart/form-data',
+                    }
+                }
+            );
+            return response;
+        } catch (error) {
+            console.error('Error adding vaccine:', error);
+            console.log('Server response:', error.response?.data);
+            throw error;
+        }
     },
 
-    async searchVaccines(searchTerm) {
-        const response = await axios.get(`${API_URL}/search?name=${searchTerm}`, {
-            headers: getAuthHeader()
-        });
-        return response.data;
+    // Update a vaccine
+    updateVaccine: async (id, formData) => {
+        try {
+            const response = await axios.put(`${API_URL}/vaccines/${id}`, formData, {
+                headers: {
+                    ...getAuthHeader(),
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error updating vaccine:', error);
+            console.log('Server response:', error.response?.data);
+            throw error;
+        }
+    },
+
+    // Delete a vaccine
+    deleteVaccine: async (id) => {
+        try {
+            const response = await axios.delete(`${API_URL}/vaccines/${id}`, {
+                headers: getAuthHeader()
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error deleting vaccine:', error);
+            throw error;
+        }
+    },
+
+    // Get vaccine categories
+    getVaccineCategories: async () => {
+        try {
+            const response = await axios.get(`${API_URL}/vaccines/categories`, {
+                headers: getAuthHeader()
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error fetching vaccine categories:', error);
+            throw error;
+        }
+    },
+
+    // Add a new vaccine category
+    addVaccineCategory: async (categoryName) => {
+        try {
+            const response = await axios.post(`${API_URL}/vaccines/categories`, { name: categoryName }, {
+                headers: {
+                    ...getAuthHeader(),
+                    'Content-Type': 'application/json'
+                }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('Error adding vaccine category:', error);
+            throw error;
+        }
     }
 };
 
