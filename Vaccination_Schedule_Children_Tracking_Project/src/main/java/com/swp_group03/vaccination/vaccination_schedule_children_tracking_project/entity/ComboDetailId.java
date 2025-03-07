@@ -5,7 +5,6 @@ import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
-import org.hibernate.Hibernate;
 
 import java.io.Serializable;
 import java.util.Objects;
@@ -13,28 +12,36 @@ import java.util.Objects;
 @Getter
 @Setter
 @Embeddable
-public class VaccineComboDetailId implements Serializable {
+public class ComboDetailId implements Serializable {
     private static final long serialVersionUID = -4753617762828333422L;
+    
     @NotNull
-    @Column(name = "ComboId", nullable = false)
+    @Column(name = "combo_id")
     private Integer comboId;
 
     @NotNull
-    @Column(name = "VaccineId", nullable = false)
-    private Integer vaccineId;
+    @Column(name = "vaccineid")
+    private Long vaccineId;
+
+    public ComboDetailId() {
+    }
+
+    public ComboDetailId(Integer comboId, Long vaccineId) {
+        this.comboId = comboId;
+        this.vaccineId = vaccineId;
+    }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (o == null || Hibernate.getClass(this) != Hibernate.getClass(o)) return false;
-        VaccineComboDetailId entity = (VaccineComboDetailId) o;
-        return Objects.equals(this.vaccineId, entity.vaccineId) &&
-                Objects.equals(this.comboId, entity.comboId);
+        if (o == null || getClass() != o.getClass()) return false;
+        ComboDetailId that = (ComboDetailId) o;
+        return Objects.equals(comboId, that.comboId) &&
+                Objects.equals(vaccineId, that.vaccineId);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(vaccineId, comboId);
+        return Objects.hash(comboId, vaccineId);
     }
-
-}
+} 

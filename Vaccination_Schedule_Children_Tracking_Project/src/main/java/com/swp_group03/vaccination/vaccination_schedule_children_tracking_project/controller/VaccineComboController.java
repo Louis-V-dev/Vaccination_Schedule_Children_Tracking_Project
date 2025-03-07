@@ -27,6 +27,7 @@ public class VaccineComboController {
     @GetMapping
     @Operation(summary = "Get all vaccine combos")
     public ApiResponse<List<VaccineComboResponse>> getAllCombos() {
+        System.out.println("Fetching all vaccine combos");
         ApiResponse<List<VaccineComboResponse>> response = new ApiResponse<>();
         response.setResult(vaccineComboService.getAllCombos());
         response.setMessage("Retrieved all vaccine combos successfully");
@@ -37,6 +38,7 @@ public class VaccineComboController {
     @GetMapping("/{id}")
     @Operation(summary = "Get vaccine combo by ID")
     public ApiResponse<VaccineComboResponse> getComboById(@PathVariable Integer id) {
+        System.out.println("Fetching vaccine combo with ID: " + id);
         ApiResponse<VaccineComboResponse> response = new ApiResponse<>();
         response.setResult(vaccineComboService.getComboById(id));
         response.setMessage("Retrieved vaccine combo successfully");
@@ -47,6 +49,7 @@ public class VaccineComboController {
     @PostMapping
     @Operation(summary = "Create new vaccine combo")
     public ApiResponse<VaccineComboResponse> createCombo(@Valid @RequestBody VaccineComboRequest request) {
+        System.out.println("Creating new vaccine combo: " + request.getComboName());
         ApiResponse<VaccineComboResponse> response = new ApiResponse<>();
         response.setResult(vaccineComboService.createCombo(request));
         response.setMessage("Created vaccine combo successfully");
@@ -59,6 +62,7 @@ public class VaccineComboController {
     public ApiResponse<VaccineComboResponse> updateCombo(
             @PathVariable Integer id,
             @Valid @RequestBody VaccineComboRequest request) {
+        System.out.println("Updating vaccine combo with ID: " + id);
         ApiResponse<VaccineComboResponse> response = new ApiResponse<>();
         response.setResult(vaccineComboService.updateCombo(id, request));
         response.setMessage("Updated vaccine combo successfully");
@@ -69,6 +73,7 @@ public class VaccineComboController {
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete vaccine combo")
     public ResponseEntity<Void> deleteCombo(@PathVariable Integer id) {
+        System.out.println("Deleting vaccine combo with ID: " + id);
         vaccineComboService.deleteCombo(id);
         return ResponseEntity.noContent().build();
     }

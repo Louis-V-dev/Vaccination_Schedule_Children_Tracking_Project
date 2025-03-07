@@ -2,6 +2,7 @@ package com.swp_group03.vaccination.vaccination_schedule_children_tracking_proje
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -21,16 +22,16 @@ public class VaccineComboRequest {
     
     private Double saleOff;
     
+    private Integer minAge;
+    
+    private Integer maxAge;
+    
     private Boolean status;
     
-    @NotEmpty(message = "Vaccine details cannot be empty")
-    private List<VaccineDetailRequest> vaccineDetails;
+    // List of category IDs this combo belongs to
+    private List<Integer> categories;
     
-    @Data
-    public static class VaccineDetailRequest {
-        private Integer vaccineId;
-        private Integer dose;
-        private String ageGroup;
-        private Double saleOff;
-    }
+    // List of vaccines in this combo
+    @NotEmpty(message = "Vaccine details cannot be empty")
+    private List<Long> vaccineIds;
 } 

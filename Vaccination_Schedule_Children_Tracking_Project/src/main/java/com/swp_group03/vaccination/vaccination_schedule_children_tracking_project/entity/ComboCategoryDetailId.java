@@ -5,7 +5,6 @@ import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
-import org.hibernate.Hibernate;
 
 import java.io.Serializable;
 import java.util.Objects;
@@ -15,26 +14,36 @@ import java.util.Objects;
 @Embeddable
 public class ComboCategoryDetailId implements Serializable {
     private static final long serialVersionUID = 285436133686361021L;
+    
     @NotNull
-    @Column(name = "ComboId", nullable = false)
+    @Column(name = "combo_id", nullable = false)
     private Integer comboId;
 
     @NotNull
-    @Column(name = "CategporyId", nullable = false)
-    private Integer categporyId;
+    @Column(name = "category_id", nullable = false)
+    private Integer categoryId;
+    
+    // Default constructor
+    public ComboCategoryDetailId() {
+    }
+    
+    // Constructor with parameters
+    public ComboCategoryDetailId(Integer comboId, Integer categoryId) {
+        this.comboId = comboId;
+        this.categoryId = categoryId;
+    }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (o == null || Hibernate.getClass(this) != Hibernate.getClass(o)) return false;
-        ComboCategoryDetailId entity = (ComboCategoryDetailId) o;
-        return Objects.equals(this.comboId, entity.comboId) &&
-                Objects.equals(this.categporyId, entity.categporyId);
+        if (o == null || getClass() != o.getClass()) return false;
+        ComboCategoryDetailId that = (ComboCategoryDetailId) o;
+        return Objects.equals(comboId, that.comboId) &&
+                Objects.equals(categoryId, that.categoryId);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(comboId, categporyId);
+        return Objects.hash(comboId, categoryId);
     }
-
-}
+} 

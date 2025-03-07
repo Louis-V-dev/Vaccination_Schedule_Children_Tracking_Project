@@ -10,11 +10,11 @@ import java.util.Objects;
 @Entity
 @Getter
 @Setter
-@Table(name = "combo_category_detail")
-public class ComboCategoryDetail implements Serializable {
+@Table(name = "combo_detail")
+public class ComboDetail implements Serializable {
 
     @EmbeddedId
-    private ComboCategoryDetailId id = new ComboCategoryDetailId();
+    private ComboDetailId id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @MapsId("comboId")
@@ -22,15 +22,19 @@ public class ComboCategoryDetail implements Serializable {
     private VaccineCombo vaccineCombo;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @MapsId("categoryId")
-    @JoinColumn(name = "category_id")
-    private ComboCategory comboCategory;
+    @MapsId("vaccineId")
+    @JoinColumn(name = "vaccineid")
+    private Vaccine vaccine;
+
+    public ComboDetail() {
+        this.id = new ComboDetailId();
+    }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        ComboCategoryDetail that = (ComboCategoryDetail) o;
+        ComboDetail that = (ComboDetail) o;
         return Objects.equals(id, that.id);
     }
 

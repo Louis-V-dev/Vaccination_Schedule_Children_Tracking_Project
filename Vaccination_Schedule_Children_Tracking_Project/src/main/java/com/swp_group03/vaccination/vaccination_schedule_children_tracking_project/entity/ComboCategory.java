@@ -1,29 +1,46 @@
 package com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import jakarta.validation.constraints.NotNull;
+import jakarta.persistence.*;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.HashSet;
+import java.util.Set;
+
 @Getter
 @Setter
 @Entity
-@Table(name = "Combo_Category")
+@Table(name = "combo_category")
 public class ComboCategory {
     @Id
-    @Column(name = "CategporyId", nullable = false)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "category_id", nullable = false)
     private Integer id;
 
-    @Size(max = 1000)
-    @NotNull
-    @Column(name = "Description", nullable = false, length = 1000)
+    @Size(max = 100)
+    @Column(name = "category_name", length = 100)
+    private String comboCategoryName;
+    
+    @Column(name = "description")
     private String description;
+    
+    @Column(name = "status")
+    private Boolean status = true;
 
-    @Column(name = "Status")
-    private Boolean status;
+    // Bidirectional many-to-many with VaccineCombo
+    @OneToMany(mappedBy = "comboCategory", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<ComboCategoryDetail> comboDetails = new HashSet<>();
 
+    // Helper method to add combo detail
+    public void addComboDetail(ComboCategoryDetail detail) {
+        comboDetails.add(detail);
+        detail.setComboCategory(this);
+    }
+
+    // Helper method to remove combo detail
+    public void removeComboDetail(ComboCategoryDetail detail) {
+        comboDetails.remove(detail);
+        detail.setComboCategory(null);
+    }
 }

@@ -9,17 +9,23 @@ public class VaccineComboResponse {
     private String comboName;
     private String description;
     private Double price;
-    private Double originalPrice;
     private Double saleOff;
+    private Integer minAge;
+    private Integer maxAge;
     private Boolean status;
-    private List<VaccineDetailResponse> vaccineDetails;
+    private List<CategoryInfo> categories;
+    private List<VaccineInfo> vaccines;
     
     @Data
-    public static class VaccineDetailResponse {
-        private Integer vaccineId;
+    public static class VaccineInfo {
+        private Long vaccineId;
         private String vaccineName;
-        private Integer dose;
-        private String ageGroup;
-        private Double saleOff;
+        private Double price;
+    }
+    
+    @Data
+    public static class CategoryInfo {
+        private Integer categoryId;
+        private String categoryName;
     }
 } 
