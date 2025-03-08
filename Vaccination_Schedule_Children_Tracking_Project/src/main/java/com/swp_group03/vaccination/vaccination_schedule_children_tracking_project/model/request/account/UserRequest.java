@@ -34,6 +34,7 @@ public class UserRequest {
     @Size(max = 100, message = "Địa chỉ không được vượt quá 100 ký tự !!")
     String address;    // Changed from Address
 
+    String dateOfBirth;
 
     Gender gender;     // Changed from Gender
     String urlImage;   // Changed from url_image

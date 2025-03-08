@@ -29,7 +29,12 @@ public enum ErrorCode {
     INVALID_REQUEST(2001, "Invalid or missing request data"),
     USERNAME_INVALID(2002, "Username must be between 3 and 16 characters"),
     PASSWORD_INVALID(2003, "Password must be between 3 and 16 characters"),
-    UNAUTHENTICATED(2004, "Invalid Username or Password");
+    UNAUTHENTICATED(2004, "Invalid Username or Password"),
+
+    // Email verification error codes
+    EMAIL_ALREADY_VERIFIED(2005, "Email has already been verified"),
+    VERIFICATION_CODE_EXPIRED(2006, "Verification code has expired"),
+    INVALID_VERIFICATION_CODE(2007, "Invalid verification code");
 
     private final int code;
     private final String message;

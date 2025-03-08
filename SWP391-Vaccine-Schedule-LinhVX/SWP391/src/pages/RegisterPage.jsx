@@ -1,9 +1,9 @@
 import React, { useState } from "react";
-import { Button, Col, Container, Form, Row, Card, Image } from "react-bootstrap";
+import { Button, Col, Container, Form, Row, Card, Image, Modal } from "react-bootstrap";
 import { Link, useNavigate } from "react-router-dom";
 import authService from "../services/authService";
 import { toast } from 'react-toastify';
-import { FaUser, FaLock, FaEnvelope, FaPhone, FaMapMarkerAlt, FaUserCircle } from 'react-icons/fa';
+import { FaUser, FaLock, FaEnvelope, FaPhone, FaMapMarkerAlt, FaUserCircle, FaCalendarAlt } from 'react-icons/fa';
 import '../css/RegisterPage.css';
 
 function RegisterPage() {
@@ -18,10 +18,14 @@ function RegisterPage() {
 		email: "",
 		phoneNumber: "",
 		address: "",
-		urlImage: ""
+		urlImage: "",
+		dateOfBirth: ""
 	});
 	const [errors, setErrors] = useState({});
 	const [isLoading, setIsLoading] = useState(false);
+	const [showVerifyModal, setShowVerifyModal] = useState(false);
+	const [verificationCode, setVerificationCode] = useState("");
+	const [verificationError, setVerificationError] = useState("");
 
 	const handleInputChange = (e) => {
 		const { id, value } = e.target;
@@ -33,7 +37,8 @@ function RegisterPage() {
 						 id === 'txtConfirmPassword' ? 'confirmPassword' :
 						 id === 'txtEmail' ? 'email' :
 						 id === 'txtPhoneNumber' ? 'phoneNumber' :
-						 id === 'txtAddress' ? 'address' : id;
+						 id === 'txtAddress' ? 'address' :
+						 id === 'txtDateOfBirth' ? 'dateOfBirth' : id;
 		
 		setFormData(prev => ({
 			...prev,
@@ -75,6 +80,9 @@ function RegisterPage() {
 		if (!formData.address.trim()) {
 			newErrors.address = "Address is required";
 		}
+		if (!formData.dateOfBirth) {
+			newErrors.dateOfBirth = "Date of birth is required";
+		}
 
 		setErrors(newErrors);
 		return Object.keys(newErrors).length === 0;
@@ -94,14 +102,43 @@ function RegisterPage() {
 			const response = await authService.register(registrationData);
 			
 			if (response.code === 100) {
-				toast.success("Registration successful!");
-				navigate("/login");
+				setShowVerifyModal(true);
+				toast.success("Please check your email for verification code!");
 			} else {
 				toast.error(response.message || "Registration failed");
 			}
 		} catch (error) {
 			console.error('Registration error:', error);
 			toast.error(error.response?.data?.message || "Registration failed");
+		} finally {
+			setIsLoading(false);
+		}
+	};
+
+	const handleVerifySubmit = async (e) => {
+		e.preventDefault();
+		if (!verificationCode.trim()) {
+			setVerificationError("Please enter verification code");
+			return;
+		}
+
+		try {
+			setIsLoading(true);
+			// Call verify endpoint
+			const response = await authService.verifyEmail(formData.email, verificationCode);
+			
+			if (response.code === 100) {
+				toast.success("Email verified successfully!");
+				setShowVerifyModal(false);
+				navigate("/login");
+			} else {
+				setVerificationError("Invalid verification code");
+				toast.error("Invalid verification code");
+			}
+		} catch (error) {
+			console.error('Verification error:', error);
+			setVerificationError("Verification failed");
+			toast.error("Verification failed");
 		} finally {
 			setIsLoading(false);
 		}
@@ -167,27 +204,49 @@ function RegisterPage() {
 									</Col>
 								</Row>
 
-								<Form.Group className="form-group">
-									<Form.Label className="text-muted">Gender</Form.Label>
-									<div className="gender-group">
-										<Form.Check 
-											type="radio"
-											label="Male"
-											name="gender"
-											id="male"
-											checked={formData.gender === "MALE"}
-											onChange={handleGenderChange}
-										/>
-										<Form.Check 
-											type="radio"
-											label="Female"
-											name="gender"
-											id="female"
-											checked={formData.gender === "FEMALE"}
-											onChange={handleGenderChange}
-										/>
-									</div>
-								</Form.Group>
+								<Row className="mb-4">
+									<Col md={6}>
+										<Form.Group controlId="txtDateOfBirth">
+											<div className="input-group">
+												<span className="input-group-text">
+													<FaCalendarAlt />
+												</span>
+												<Form.Control 
+													type="date" 
+													value={formData.dateOfBirth}
+													onChange={handleInputChange}
+													isInvalid={!!errors.dateOfBirth}
+												/>
+											</div>
+											<Form.Control.Feedback type="invalid">
+												{errors.dateOfBirth}
+											</Form.Control.Feedback>
+										</Form.Group>
+									</Col>
+									<Col md={6}>
+										<Form.Group className="form-group">
+											<Form.Label className="text-muted">Gender</Form.Label>
+											<div className="gender-group">
+												<Form.Check 
+													type="radio"
+													label="Male"
+													name="gender"
+													id="male"
+													checked={formData.gender === "MALE"}
+													onChange={handleGenderChange}
+												/>
+												<Form.Check 
+													type="radio"
+													label="Female"
+													name="gender"
+													id="female"
+													checked={formData.gender === "FEMALE"}
+													onChange={handleGenderChange}
+												/>
+											</div>
+										</Form.Group>
+									</Col>
+								</Row>
 
 								<Form.Group className="form-group" controlId="txtUsername">
 									<div className="input-group">
@@ -325,6 +384,35 @@ function RegisterPage() {
 					</Card>
 				</Col>
 			</Row>
+
+			{/* Verification Modal */}
+			<Modal show={showVerifyModal} onHide={() => setShowVerifyModal(false)}>
+				<Modal.Header closeButton>
+					<Modal.Title>Email Verification</Modal.Title>
+				</Modal.Header>
+				<Modal.Body>
+					<p>We've sent a verification code to your email address. Please enter the code below to complete your registration.</p>
+					<Form onSubmit={handleVerifySubmit}>
+						<Form.Group className="mb-3">
+							<Form.Control
+								type="text"
+								placeholder="Enter 6-digit verification code"
+								value={verificationCode}
+								onChange={(e) => setVerificationCode(e.target.value)}
+								isInvalid={!!verificationError}
+							/>
+							<Form.Control.Feedback type="invalid">
+								{verificationError}
+							</Form.Control.Feedback>
+						</Form.Group>
+						<div className="d-grid">
+							<Button variant="primary" type="submit" disabled={isLoading}>
+								{isLoading ? "Verifying..." : "Verify Email"}
+							</Button>
+						</div>
+					</Form>
+				</Modal.Body>
+			</Modal>
 		</Container>
 	);
 }

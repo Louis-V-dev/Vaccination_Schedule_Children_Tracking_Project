@@ -12,6 +12,7 @@ import org.hibernate.annotations.Nationalized;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "Accounts")
@@ -19,6 +20,7 @@ import java.util.Set;
 public class Account {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "account_id")
     private String accountId;
 
     @Column(name = "username", length = 30,unique=true)
@@ -31,14 +33,14 @@ public class Account {
 //            " in hoa !!")
     private String password;
 
-    @Column(name = "first_Name", length = 100)
+    @Column(name = "first_name", length = 100)
     @Nationalized
-    @Size(max = 100, message = "first_Name không được vượt quá 100 ký tự !!")
+    @Size(max = 100, message = "first_name không được vượt quá 100 ký tự !!")
     private String firstName;
 
-    @Column(name = "last_Name", length = 100)
+    @Column(name = "last_name", length = 100)
     @Nationalized
-    @Size(max = 100, message = "last_Name không được vượt quá 100 ký tự !!")
+    @Size(max = 100, message = "last_name không được vượt quá 100 ký tự !!")
     private String lastName;
 
     @Column(name = "email", length = 50)
@@ -46,15 +48,17 @@ public class Account {
     @Size(max = 50, message = "Email không được vượt quá 50 ký tự !!")
     private String email;
 
-    @Column(name = "phoneNumber", length = 10)
-    @Pattern(regexp = "^0[0-9]{9}$", message = "Enter correct " +
-            "Phone number")
+    @Column(name = "phone_number", length = 10)
+    @Pattern(regexp = "^0[0-9]{9}$", message = "Enter correct Phone number")
     private String phoneNumber;
 
     @Column(name = "address", length = 100)
     @Nationalized
     @Size(max = 100, message = "Địa chỉ không được vượt quá 100 ký tự !!")
     private String address;
+
+    @Column(name = "date_of_birth")
+    private String dateOfBirth;
 
     @Enumerated(EnumType.STRING) // Use STRING to store the enum as a string in the database
     @Column(name = "gender", length = 6)
@@ -63,8 +67,17 @@ public class Account {
     @Column(name = "status")
     private boolean status;
 
-    @Column(name = "URL_image")
+    @Column(name = "url_image")
     private String urlImage;
+
+    @Column(name = "verification_code", length = 6)
+    private String verificationCode;
+
+    @Column(name = "verification_code_expiry")
+    private LocalDateTime verificationCodeExpiry;
+
+    @Column(name = "email_verified")
+    private boolean emailVerified = false;
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "Account_Role",
@@ -152,6 +165,14 @@ public class Account {
         this.address = address;
     }
 
+    public String getDateOfBirth() {
+        return dateOfBirth;
+    }
+
+    public void setDateOfBirth(String dateOfBirth) {
+        this.dateOfBirth = dateOfBirth;
+    }
+
     public Gender getGender() {
         return gender;
     }
@@ -182,6 +203,30 @@ public class Account {
 
     public void setRoles(Set<Role> roles) {
         this.roles = roles;
+    }
+
+    public String getVerificationCode() {
+        return verificationCode;
+    }
+
+    public void setVerificationCode(String verificationCode) {
+        this.verificationCode = verificationCode;
+    }
+
+    public LocalDateTime getVerificationCodeExpiry() {
+        return verificationCodeExpiry;
+    }
+
+    public void setVerificationCodeExpiry(LocalDateTime verificationCodeExpiry) {
+        this.verificationCodeExpiry = verificationCodeExpiry;
+    }
+
+    public boolean isEmailVerified() {
+        return emailVerified;
+    }
+
+    public void setEmailVerified(boolean emailVerified) {
+        this.emailVerified = emailVerified;
     }
 
     //

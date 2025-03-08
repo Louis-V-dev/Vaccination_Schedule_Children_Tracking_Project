@@ -13,7 +13,7 @@ public class Child{
     private String child_id;
 
     @Column(name = "Name",length = 100)
-    @NotBlank(message = "Vui lòng nhập tên cảu trẻ")
+    @NotBlank(message = "Vui lòng nhập tên của trẻ")
     private String child_name;
     @Temporal(TemporalType.DATE)
     @Column(name = "Date_Of_Birth")

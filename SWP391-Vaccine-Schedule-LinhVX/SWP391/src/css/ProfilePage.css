@@ -1,0 +1,259 @@
+.profile-card {
+    border-radius: 10px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    border: none;
+}
+
+.profile-card:hover {
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1) !important;
+}
+
+.profile-field h6 {
+    font-size: 0.9rem;
+    margin-bottom: 5px;
+}
+
+.profile-field p {
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+
+/* Style the avatar image if needed */
+.profile-avatar {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 5px solid #fff;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Add some spacing between form elements */
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+/* Make form labels stand out a bit */
+.form-label {
+    font-weight: 500;
+    color: #495057;
+}
+
+/* Add style to the Edit button */
+.edit-btn {
+    transition: all 0.2s ease;
+}
+
+.edit-btn:hover {
+    transform: translateY(-2px);
+}
+
+/* Add style to the profile container */
+.profile-container {
+    background-color: #f8f9fa;
+    padding: 2rem;
+    border-radius: 10px;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .profile-field {
+        margin-bottom: 1.5rem;
+    }
+    
+    .profile-field h6 {
+        font-size: 0.8rem;
+    }
+    
+    .profile-field p {
+        font-size: 1rem;
+    }
+}
+
+.profile-content {
+    width: 100%;
+}
+
+.profile-tabs .nav-link {
+    color: #495057;
+    border: none;
+    border-bottom: 3px solid transparent;
+    font-weight: 500;
+}
+
+.profile-tabs .nav-link:hover {
+    border-color: rgba(40, 167, 69, 0.3);
+}
+
+.profile-tabs .nav-link.active {
+    color: #28a745;
+    border-color: #28a745;
+    background-color: transparent;
+}
+
+.section-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 1.5rem;
+}
+
+.children-section {
+    background-color: white;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.child-card {
+    border: none;
+    border-radius: 10px;
+    background-color: #f0f9f0;
+    transition: all 0.2s ease;
+}
+
+.child-card:hover {
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.child-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #28a745;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+.child-info h5 {
+    font-weight: 600;
+}
+
+.child-form-card {
+    border: none;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.child-form-card .card-header {
+    background-color: #7b61ff;
+    color: white;
+}
+
+.add-child-btn {
+    background-color: #28a745;
+    border-color: #28a745;
+    transition: all 0.2s ease;
+}
+
+.add-child-btn:hover {
+    background-color: #218838;
+    border-color: #1e7e34;
+    transform: translateY(-2px);
+}
+
+/* Form Styling */
+.form-label {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+.form-control:focus {
+    border-color: #28a745;
+    box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+}
+
+.btn-success {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+.btn-success:hover {
+    background-color: #218838;
+    border-color: #1e7e34;
+}
+
+.btn-outline-success {
+    color: #28a745;
+    border-color: #28a745;
+}
+
+.btn-outline-success:hover {
+    background-color: #28a745;
+    border-color: #28a745;
+    color: white;
+}
+
+/* Responsive Styling */
+@media (max-width: 768px) {
+    .section-title {
+        font-size: 1.25rem;
+    }
+    
+    .children-section {
+        padding: 15px;
+    }
+    
+    .profile-field {
+        flex-direction: column;
+    }
+    
+    .profile-field-icon {
+        margin-bottom: 10px;
+    }
+}
+
+.profile-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #eee;
+    padding: 15px 20px;
+}
+
+.profile-card h3 {
+    color: #333;
+    font-weight: 600;
+}
+
+.profile-info {
+    padding: 10px;
+}
+
+.profile-field {
+    display: flex;
+    margin-bottom: 20px;
+}
+
+.profile-field-icon {
+    width: 40px;
+    height: 40px;
+    background-color: #e8f5e9;
+    color: #28a745;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+}
+
+.profile-field-content h6 {
+    font-size: 0.9rem;
+    color: #6c757d;
+    margin-bottom: 5px;
+}
+
+.profile-field-content p {
+    font-size: 1.1rem;
+    font-weight: 500;
+    margin-bottom: 0;
+}
+
+.fa-at-fix {
+    font-size: 0.9em;
+} 

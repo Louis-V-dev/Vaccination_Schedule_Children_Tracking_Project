@@ -14,7 +14,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Random;
 
 @Service
 @Transactional
@@ -25,6 +27,18 @@ public class UserService {
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private EmailService emailService;
+
+    public Account findById(String accountId) {
+        return userRepo.findById(accountId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    public AccountResponse mapToAccountResponse(Account account) {
+        return userMapper.toAccountResponse(account);
+    }
 
     public Account createAccount(UserRequest request) {
         if (request == null) {
@@ -44,8 +58,20 @@ public class UserService {
 
         account.setPassword(passwordEncoder.encode(request.getPassword()));
         account.setStatus(true);
+        account.setDateOfBirth(request.getDateOfBirth());
         
-        return userRepo.save(account);
+        // Generate and set verification code
+        String verificationCode = generateVerificationCode();
+        account.setVerificationCode(verificationCode);
+        account.setVerificationCodeExpiry(LocalDateTime.now().plusMinutes(5));
+        account.setEmailVerified(false);
+
+        Account savedAccount = userRepo.save(account);
+        
+        // Send verification email
+        emailService.sendVerificationCode(account.getEmail(), verificationCode);
+        
+        return savedAccount;
     }
 
     public Account updateAccount(UserUpdate request, String accountId) {
@@ -57,6 +83,11 @@ public class UserService {
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
         userMapper.toUpdateUser(request, account);
+        
+        if (request.getDateOfBirth() != null) {
+            account.setDateOfBirth(request.getDateOfBirth());
+        }
+        
         return userRepo.save(account);
     }
 
@@ -74,5 +105,33 @@ public class UserService {
         }
 
         return responses;
+    }
+
+    public void verifyEmail(String email, String code) {
+        Account account = userRepo.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        if (account.isEmailVerified()) {
+            throw new AppException(ErrorCode.EMAIL_ALREADY_VERIFIED);
+        }
+
+        if (account.getVerificationCodeExpiry().isBefore(LocalDateTime.now())) {
+            throw new AppException(ErrorCode.VERIFICATION_CODE_EXPIRED);
+        }
+
+        if (!account.getVerificationCode().equals(code)) {
+            throw new AppException(ErrorCode.INVALID_VERIFICATION_CODE);
+        }
+
+        account.setEmailVerified(true);
+        account.setVerificationCode(null);
+        account.setVerificationCodeExpiry(null);
+        userRepo.save(account);
+    }
+
+    private String generateVerificationCode() {
+        Random random = new Random();
+        int code = 100000 + random.nextInt(900000); // generates a number between 100000 and 999999
+        return String.valueOf(code);
     }
 }

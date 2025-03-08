@@ -1,0 +1,41 @@
+.user-layout-container {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.user-layout {
+    flex: 1;
+    display: flex;
+    min-height: calc(100vh - 56px); /* Subtract navbar height */
+    background-color: #f5f6fa;
+}
+
+.sidebar-col {
+    padding: 0;
+    background-color: white;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+}
+
+.content-col {
+    padding: 0;
+    background-color: #f5f6fa;
+}
+
+.user-content {
+    padding: 25px;
+    height: 100%;
+    min-height: calc(100vh - 56px);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .user-layout {
+        min-height: auto;
+    }
+    
+    .user-content {
+        padding: 15px;
+        min-height: auto;
+    }
+} 

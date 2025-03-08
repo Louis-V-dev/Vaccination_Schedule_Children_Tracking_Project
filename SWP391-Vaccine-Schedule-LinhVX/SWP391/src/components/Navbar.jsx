@@ -79,7 +79,7 @@ const NavBar = () => {
 				<Nav className="me-auto">
 					<Nav.Link as={Link} to="/" className="px-3">Home</Nav.Link>
 					<Nav.Link as={Link} to="/AboutUs" className="px-3">About Us</Nav.Link>
-					<Nav.Link as={Link} to="/PriceList" className="px-3">Price List</Nav.Link>
+					<Nav.Link as={Link} to="/vaccines" className="px-3">Vaccine List</Nav.Link>
 				</Nav>
 				{!isLoggedIn && (
 					<div className="d-flex align-items-center">

@@ -17,10 +17,24 @@ public interface UserMapper {
     
     @Mapping(target = "roles", ignore = true)
     @Mapping(target = "status", constant = "true")
+    @Mapping(target = "accountId", ignore = true)
+    @Mapping(target = "firstName", source = "firstName")
+    @Mapping(target = "lastName", source = "lastName")
+    @Mapping(target = "phoneNumber", source = "phoneNumber")
+    @Mapping(target = "dateOfBirth", source = "dateOfBirth")
+    @Mapping(target = "gender", source = "gender")
+    @Mapping(target = "urlImage", source = "urlImage")
     Account toCreateUser(UserRequest request);
 
     @Mapping(target = "username", ignore = true)
     @Mapping(target = "roles", ignore = true)
+    @Mapping(target = "status", ignore = true)
+    @Mapping(target = "firstName", source = "firstName")
+    @Mapping(target = "lastName", source = "lastName")
+    @Mapping(target = "phoneNumber", source = "phoneNumber")
+    @Mapping(target = "dateOfBirth", source = "dateOfBirth")
+    @Mapping(target = "gender", source = "gender")
+    @Mapping(target = "urlImage", source = "urlImage")
     void toUpdateUser(UserUpdate request, @MappingTarget Account account);
 
     @Mapping(target = "accountId", source = "accountId")
@@ -29,6 +43,9 @@ public interface UserMapper {
     @Mapping(target = "lastName", source = "lastName")
     @Mapping(target = "email", source = "email")
     @Mapping(target = "phoneNumber", source = "phoneNumber")
+    @Mapping(target = "dateOfBirth", source = "dateOfBirth")
+    @Mapping(target = "address", source = "address")
+    @Mapping(target = "gender", source = "gender")
     @Mapping(target = "status", source = "status")
     @Mapping(target = "roles", expression = "java(mapRoles(account))")
     AccountResponse toAccountResponse(Account account);

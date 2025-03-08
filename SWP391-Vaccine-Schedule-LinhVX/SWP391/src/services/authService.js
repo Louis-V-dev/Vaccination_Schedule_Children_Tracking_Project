@@ -40,7 +40,19 @@ axiosInstance.interceptors.response.use(
 const authService = {
     register: async (userData) => {
         try {
-            const response = await axiosInstance.post('/users/register', userData);
+            const response = await axiosInstance.post('/api/users/register', userData);
+            return response.data;
+        } catch (error) {
+            throw error;
+        }
+    },
+
+    verifyEmail: async (email, code) => {
+        try {
+            const response = await axiosInstance.post('/api/users/verify-email', {
+                email,
+                verificationCode: code
+            });
             return response.data;
         } catch (error) {
             throw error;
