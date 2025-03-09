@@ -5,9 +5,16 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.dao.InvalidDataAccessResourceUsageException;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalException {
+
+    private static final Logger logger = LoggerFactory.getLogger(GlobalException.class);
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse> handlingOtherException(Exception e){
@@ -20,14 +27,26 @@ public class GlobalException {
     }
 
     @ExceptionHandler(AppException.class)
-    public ResponseEntity<ApiResponse> handlingAppException(AppException e){
-        ApiResponse apiResponse = new ApiResponse();
-
-        ErrorCode errorCode = e.getErrorCode();
-        apiResponse.setCode(errorCode.getCode());
-        apiResponse.setMessage(errorCode.getMessage());
-
-        return ResponseEntity.badRequest().body(apiResponse);
+    public ApiResponse<Object> handleAppException(AppException e) {
+        logger.warn(e.getMessage(), e);
+        
+        // For EMAIL_NOT_VERIFIED, include the email in the response
+        if (e.getErrorCode() == ErrorCode.EMAIL_NOT_VERIFIED && e.getEmail() != null) {
+            Map<String, Object> errorInfo = new HashMap<>();
+            errorInfo.put("email", e.getEmail());
+            
+            return ApiResponse.builder()
+                .code(e.getErrorCode().getCode())
+                .message(e.getErrorCode().getMessage())
+                .result(errorInfo)
+                .build();
+        }
+        
+        // For other exceptions
+        return ApiResponse.builder()
+            .code(e.getErrorCode().getCode())
+            .message(e.getErrorCode().getMessage())
+            .build();
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

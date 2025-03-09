@@ -45,8 +45,14 @@ public class UserService {
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
 
+        // Check for existing username
         if (userRepo.existsByUsername(request.getUsername())) {
-            throw new AppException(ErrorCode.USER_ALREADY_EXIST);
+            throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
+        }
+
+        // Check for existing email
+        if (userRepo.findByEmail(request.getEmail()).isPresent()) {
+            throw new AppException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
 
         PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
@@ -57,7 +63,7 @@ public class UserService {
         }
 
         account.setPassword(passwordEncoder.encode(request.getPassword()));
-        account.setStatus(true);
+        account.setStatus(false); // Set status to false until email is verified
         account.setDateOfBirth(request.getDateOfBirth());
         
         // Generate and set verification code
@@ -126,6 +132,7 @@ public class UserService {
         account.setEmailVerified(true);
         account.setVerificationCode(null);
         account.setVerificationCodeExpiry(null);
+        account.setStatus(true); // Activate the account after email verification
         userRepo.save(account);
     }
 

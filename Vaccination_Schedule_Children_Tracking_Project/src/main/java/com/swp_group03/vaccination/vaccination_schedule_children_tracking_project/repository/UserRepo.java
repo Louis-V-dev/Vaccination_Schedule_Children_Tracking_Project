@@ -9,7 +9,8 @@ import java.util.Optional;
 
 @Repository
 public interface UserRepo extends JpaRepository<Account, String> {
-    boolean existsByUsername(String username);
+    @Query("SELECT CASE WHEN COUNT(a) > 0 THEN true ELSE false END FROM Account a WHERE a.username = :username")
+    boolean existsByUsername(@Param("username") String username);
 
     @Query("SELECT a FROM Account a LEFT JOIN FETCH a.roles WHERE a.username = :username")
     Optional<Account> findByUsername(@Param("username") String username);

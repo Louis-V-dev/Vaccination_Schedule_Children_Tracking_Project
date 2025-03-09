@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Button, Col, Container, Form, Row, Card, Image, Modal } from "react-bootstrap";
+import { Button, Col, Container, Form, Row, Card, Image, Modal, Alert, InputGroup } from "react-bootstrap";
 import { Link, useNavigate } from "react-router-dom";
 import authService from "../services/authService";
 import { toast } from 'react-toastify';
@@ -26,6 +26,9 @@ function RegisterPage() {
 	const [showVerifyModal, setShowVerifyModal] = useState(false);
 	const [verificationCode, setVerificationCode] = useState("");
 	const [verificationError, setVerificationError] = useState("");
+	const [error, setError] = useState("");
+	const [success, setSuccess] = useState("");
+	const [serverErrors, setServerErrors] = useState({});
 
 	const handleInputChange = (e) => {
 		const { id, value } = e.target;
@@ -56,32 +59,75 @@ function RegisterPage() {
 	const validateForm = () => {
 		const newErrors = {};
 		
+		// First Name validation
 		if (!formData.firstName.trim()) {
 			newErrors.firstName = "First name is required";
+		} else if (formData.firstName.length > 100) {
+			newErrors.firstName = "First name cannot exceed 100 characters";
 		}
+
+		// Last Name validation
 		if (!formData.lastName.trim()) {
 			newErrors.lastName = "Last name is required";
+		} else if (formData.lastName.length > 100) {
+			newErrors.lastName = "Last name cannot exceed 100 characters";
 		}
-		if (!formData.username || formData.username.length < 3) {
-			newErrors.username = "Username must be at least 3 characters";
+
+		// Username validation
+		if (!formData.username) {
+			newErrors.username = "Username is required";
+		} else if (formData.username.length < 3 || formData.username.length > 30) {
+			newErrors.username = "Username must be between 3 and 30 characters";
 		}
-		if (!formData.password || formData.password.length < 3) {
-			newErrors.password = "Password must be at least 3 characters";
+
+		// Password validation
+		if (!formData.password) {
+			newErrors.password = "Password is required";
+		} else if (formData.password.length < 3 || formData.password.length > 16) {
+			newErrors.password = "Password must be between 3 and 16 characters";
 		}
+
+		// Confirm Password validation
 		if (formData.password !== formData.confirmPassword) {
 			newErrors.confirmPassword = "Passwords do not match";
 		}
-		if (!formData.email || !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/.test(formData.email)) {
-			newErrors.email = "Please enter a valid email";
+
+		// Email validation
+		if (!formData.email) {
+			newErrors.email = "Email is required";
+		} else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/.test(formData.email)) {
+			newErrors.email = "Please enter a valid email address";
+		} else if (formData.email.length > 50) {
+			newErrors.email = "Email cannot exceed 50 characters";
 		}
-		if (!formData.phoneNumber || !/^0[0-9]{9}$/.test(formData.phoneNumber)) {
+
+		// Phone validation
+		if (!formData.phoneNumber) {
+			newErrors.phoneNumber = "Phone number is required";
+		} else if (!/^0[0-9]{9}$/.test(formData.phoneNumber)) {
 			newErrors.phoneNumber = "Phone number must start with 0 and have 10 digits";
 		}
+
+		// Address validation
 		if (!formData.address.trim()) {
 			newErrors.address = "Address is required";
+		} else if (formData.address.length > 100) {
+			newErrors.address = "Address cannot exceed 100 characters";
 		}
+
+		// Date of Birth validation
 		if (!formData.dateOfBirth) {
 			newErrors.dateOfBirth = "Date of birth is required";
+		} else {
+			const dob = new Date(formData.dateOfBirth);
+			const today = new Date();
+			const age = today.getFullYear() - dob.getFullYear();
+			
+			if (dob > today) {
+				newErrors.dateOfBirth = "Date of birth cannot be in the future";
+			} else if (age > 120) {
+				newErrors.dateOfBirth = "Please enter a valid date of birth";
+			}
 		}
 
 		setErrors(newErrors);
@@ -90,26 +136,49 @@ function RegisterPage() {
 
 	const handleSubmit = async (e) => {
 		e.preventDefault();
-		
+		setError('');
+		setSuccess('');
+		setServerErrors({});
+
 		if (!validateForm()) {
 			return;
 		}
 
 		try {
 			setIsLoading(true);
-			const { confirmPassword, ...registrationData } = formData;
-			console.log('Sending registration data:', registrationData);
-			const response = await authService.register(registrationData);
+			const response = await authService.register(formData);
 			
-			if (response.code === 100) {
+			if (response.success) {
+				setSuccess('Registration successful! Please check your email for verification.');
 				setShowVerifyModal(true);
-				toast.success("Please check your email for verification code!");
-			} else {
-				toast.error(response.message || "Registration failed");
+				toast.success("Account created! Email verification is required before you can log in. Please check your email for the verification code.");
 			}
-		} catch (error) {
-			console.error('Registration error:', error);
-			toast.error(error.response?.data?.message || "Registration failed");
+		} catch (err) {
+			console.error('Registration error:', err);
+			console.log('Error details:', {
+				message: err.message,
+				field: err.field,
+				code: err.code,
+				stack: err.stack
+			});
+			
+			// Clear any previous errors
+			setServerErrors({});
+			
+			if (err.field) {
+				// Set field-specific error
+				setServerErrors({
+					[err.field]: err.message
+				});
+				
+				// Show error message in toast
+				toast.error(`${err.field}: ${err.message}`);
+			} else {
+				// Set general error message
+				const errorMessage = err.message || 'Registration failed. Please try again later.';
+				setError(errorMessage);
+				toast.error(errorMessage);
+			}
 		} finally {
 			setIsLoading(false);
 		}
@@ -162,6 +231,18 @@ function RegisterPage() {
 								</p>
 							</div>
 
+							{error && (
+								<Alert variant="danger" className="mb-4">
+									{error}
+								</Alert>
+							)}
+
+							{success && (
+								<Alert variant="success" className="mb-4">
+									{success}
+								</Alert>
+							)}
+
 							<Form onSubmit={handleSubmit}>
 								<Row className="mb-4">
 									<Col md={6}>
@@ -175,11 +256,11 @@ function RegisterPage() {
 													placeholder="First Name" 
 													value={formData.firstName}
 													onChange={handleInputChange}
-													isInvalid={!!errors.firstName}
+													isInvalid={!!errors.firstName || !!serverErrors.firstName}
 												/>
 											</div>
 											<Form.Control.Feedback type="invalid">
-												{errors.firstName}
+												{errors.firstName || serverErrors.firstName}
 											</Form.Control.Feedback>
 										</Form.Group>
 									</Col>
@@ -194,11 +275,11 @@ function RegisterPage() {
 													placeholder="Last Name" 
 													value={formData.lastName}
 													onChange={handleInputChange}
-													isInvalid={!!errors.lastName}
+													isInvalid={!!errors.lastName || !!serverErrors.lastName}
 												/>
 											</div>
 											<Form.Control.Feedback type="invalid">
-												{errors.lastName}
+												{errors.lastName || serverErrors.lastName}
 											</Form.Control.Feedback>
 										</Form.Group>
 									</Col>
@@ -215,11 +296,16 @@ function RegisterPage() {
 													type="date" 
 													value={formData.dateOfBirth}
 													onChange={handleInputChange}
-													isInvalid={!!errors.dateOfBirth}
+													isInvalid={!!errors.dateOfBirth || !!serverErrors.dateOfBirth}
+													max={new Date().toISOString().split('T')[0]}
+													placeholder="Select your date of birth"
 												/>
 											</div>
+											<Form.Text className="text-muted">
+												Please enter your date of birth
+											</Form.Text>
 											<Form.Control.Feedback type="invalid">
-												{errors.dateOfBirth}
+												{errors.dateOfBirth || serverErrors.dateOfBirth}
 											</Form.Control.Feedback>
 										</Form.Group>
 									</Col>
@@ -248,7 +334,7 @@ function RegisterPage() {
 									</Col>
 								</Row>
 
-								<Form.Group className="form-group" controlId="txtUsername">
+								<Form.Group controlId="txtUsername">
 									<div className="input-group">
 										<span className="input-group-text">
 											<FaUser />
@@ -258,12 +344,14 @@ function RegisterPage() {
 											placeholder="Username (min 3 characters)" 
 											value={formData.username}
 											onChange={handleInputChange}
-											isInvalid={!!errors.username}
+											isInvalid={!!errors.username || !!serverErrors.username}
 										/>
 									</div>
-									<Form.Control.Feedback type="invalid">
-										{errors.username}
-									</Form.Control.Feedback>
+									{(errors.username || serverErrors.username) && (
+										<div className="error-text">
+											{errors.username || serverErrors.username}
+										</div>
+									)}
 								</Form.Group>
 
 								<Row className="mb-4">
@@ -278,12 +366,14 @@ function RegisterPage() {
 													placeholder="Password (min 3 characters)" 
 													value={formData.password}
 													onChange={handleInputChange}
-													isInvalid={!!errors.password}
+													isInvalid={!!errors.password || !!serverErrors.password}
 												/>
 											</div>
-											<Form.Control.Feedback type="invalid">
-												{errors.password}
-											</Form.Control.Feedback>
+											{(errors.password || serverErrors.password) && (
+												<div className="error-text">
+													{errors.password || serverErrors.password}
+												</div>
+											)}
 										</Form.Group>
 									</Col>
 									<Col md={6}>
@@ -297,35 +387,40 @@ function RegisterPage() {
 													placeholder="Confirm Password" 
 													value={formData.confirmPassword}
 													onChange={handleInputChange}
-													isInvalid={!!errors.confirmPassword}
+													isInvalid={!!errors.confirmPassword || !!serverErrors.confirmPassword}
 												/>
 											</div>
-											<Form.Control.Feedback type="invalid">
-												{errors.confirmPassword}
-											</Form.Control.Feedback>
+											{(errors.confirmPassword || serverErrors.confirmPassword) && (
+												<div className="error-text">
+													{errors.confirmPassword || serverErrors.confirmPassword}
+												</div>
+											)}
 										</Form.Group>
 									</Col>
 								</Row>
 
-								<Form.Group className="form-group" controlId="txtEmail">
+								<Form.Group className="mb-4" controlId="txtEmail">
 									<div className="input-group">
 										<span className="input-group-text">
 											<FaEnvelope />
 										</span>
-										<Form.Control 
-											type="email" 
+										<Form.Control
+											type="email"
 											placeholder="Email Address" 
 											value={formData.email}
 											onChange={handleInputChange}
-											isInvalid={!!errors.email}
+											name="email"
+											isInvalid={!!errors.email || !!serverErrors.email}
 										/>
 									</div>
-									<Form.Control.Feedback type="invalid">
-										{errors.email}
-									</Form.Control.Feedback>
+									{(errors.email || serverErrors.email) && (
+										<div className="error-text">
+											{errors.email || serverErrors.email}
+										</div>
+									)}
 								</Form.Group>
 
-								<Form.Group className="form-group" controlId="txtPhoneNumber">
+								<Form.Group className="mb-4" controlId="txtPhoneNumber">
 									<div className="input-group">
 										<span className="input-group-text">
 											<FaPhone />
@@ -335,15 +430,17 @@ function RegisterPage() {
 											placeholder="Phone Number (start with 0)" 
 											value={formData.phoneNumber}
 											onChange={handleInputChange}
-											isInvalid={!!errors.phoneNumber}
+											isInvalid={!!errors.phoneNumber || !!serverErrors.phoneNumber}
 										/>
 									</div>
-									<Form.Control.Feedback type="invalid">
-										{errors.phoneNumber}
-									</Form.Control.Feedback>
+									{(errors.phoneNumber || serverErrors.phoneNumber) && (
+										<div className="error-text">
+											{errors.phoneNumber || serverErrors.phoneNumber}
+										</div>
+									)}
 								</Form.Group>
 
-								<Form.Group className="form-group" controlId="txtAddress">
+								<Form.Group className="mb-4" controlId="txtAddress">
 									<div className="input-group">
 										<span className="input-group-text">
 											<FaMapMarkerAlt />
@@ -353,12 +450,14 @@ function RegisterPage() {
 											placeholder="Address" 
 											value={formData.address}
 											onChange={handleInputChange}
-											isInvalid={!!errors.address}
+											isInvalid={!!errors.address || !!serverErrors.address}
 										/>
 									</div>
-									<Form.Control.Feedback type="invalid">
-										{errors.address}
-									</Form.Control.Feedback>
+									{(errors.address || serverErrors.address) && (
+										<div className="error-text">
+											{errors.address || serverErrors.address}
+										</div>
+									)}
 								</Form.Group>
 
 								<div className="d-grid gap-2">
@@ -388,10 +487,14 @@ function RegisterPage() {
 			{/* Verification Modal */}
 			<Modal show={showVerifyModal} onHide={() => setShowVerifyModal(false)}>
 				<Modal.Header closeButton>
-					<Modal.Title>Email Verification</Modal.Title>
+					<Modal.Title>Email Verification Required</Modal.Title>
 				</Modal.Header>
 				<Modal.Body>
-					<p>We've sent a verification code to your email address. Please enter the code below to complete your registration.</p>
+					<div className="alert alert-info">
+						<strong>Important:</strong> Your account will only be activated after email verification.
+					</div>
+					<p>We've sent a verification code to your email address. Please enter the code below to verify your account.</p>
+					<p>You <strong>must verify your email</strong> before you can log in to your account.</p>
 					<Form onSubmit={handleVerifySubmit}>
 						<Form.Group className="mb-3">
 							<Form.Control

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Form, Button, Alert, Spinner, Nav } from 'react-bootstrap';
+import { Container, Row, Col, Card, Form, Button, Alert, Spinner, Nav, Tab } from 'react-bootstrap';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faUser, faEdit, faCheck, faTimes, faPlus, faChild, faIdCard, faPhone, faMapMarkerAlt, faCalendarAlt, faVenusMars, faAt } from '@fortawesome/free-solid-svg-icons';
+import { faUser, faEdit, faCheck, faTimes, faPlus, faChild, faIdCard, faPhone, faMapMarkerAlt, faCalendarAlt, faVenusMars, faAt, faKey, faLock } from '@fortawesome/free-solid-svg-icons';
 import { toast } from 'react-toastify';
 import { jwtDecode } from 'jwt-decode';
 import UserLayout from './UserLayout';
 import '../css/ProfilePage.css';
+import accountService from '../services/accountService';
 
 const ProfilePage = () => {
     const [activeTab, setActiveTab] = useState('profile');
@@ -52,6 +53,16 @@ const ProfilePage = () => {
     const [editingChildId, setEditingChildId] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    
+    // Add new state for password
+    const [passwordForm, setPasswordForm] = useState({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+    });
+    const [passwordErrors, setPasswordErrors] = useState({});
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
+    const [passwordSuccess, setPasswordSuccess] = useState('');
     
     useEffect(() => {
         const fetchUserProfile = async () => {
@@ -270,6 +281,142 @@ const ProfilePage = () => {
         }
     };
     
+    // Add handler for password form
+    const handlePasswordChange = (e) => {
+        const { name, value } = e.target;
+        setPasswordForm(prev => ({
+            ...prev,
+            [name]: value
+        }));
+        
+        // Clear errors for this field
+        if (passwordErrors[name]) {
+            setPasswordErrors(prev => ({
+                ...prev,
+                [name]: ''
+            }));
+        }
+    };
+    
+    const validatePasswordForm = () => {
+        const errors = {};
+        
+        if (!passwordForm.currentPassword) {
+            errors.currentPassword = 'Current password is required';
+        }
+        
+        if (!passwordForm.newPassword) {
+            errors.newPassword = 'New password is required';
+        } else if (passwordForm.newPassword.length < 3 || passwordForm.newPassword.length > 16) {
+            errors.newPassword = 'Password must be between 3 and 16 characters';
+        }
+        
+        if (!passwordForm.confirmPassword) {
+            errors.confirmPassword = 'Please confirm your new password';
+        } else if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+            errors.confirmPassword = 'Passwords do not match';
+        }
+        
+        setPasswordErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+    
+    const handlePasswordSubmit = async (e) => {
+        e.preventDefault();
+        
+        if (!validatePasswordForm()) {
+            return;
+        }
+        
+        try {
+            // Check if user is authenticated
+            const token = localStorage.getItem('token');
+            if (!token) {
+                toast.error('Authentication required. Please log in again.');
+                setPasswordErrors({
+                    general: 'You need to be logged in to change your password.'
+                });
+                return;
+            }
+            
+            setIsChangingPassword(true);
+            setPasswordErrors({});
+            
+            const response = await accountService.changePassword(
+                passwordForm.currentPassword,
+                passwordForm.newPassword
+            );
+            
+            // Add a more prominent success alert
+            setPasswordSuccess("Password changed successfully! Your new password is now active.");
+            
+            // Show toast notification
+            toast.success('Password changed successfully!', {
+                position: "top-center",
+                autoClose: 5000,
+                hideProgressBar: false,
+                closeOnClick: true,
+                pauseOnHover: true,
+                draggable: true,
+            });
+            
+            // Reset form
+            setPasswordForm({
+                currentPassword: '',
+                newPassword: '',
+                confirmPassword: ''
+            });
+            
+        } catch (err) {
+            console.error('Error changing password:', err);
+            
+            // Check for specific error messages
+            if (err.message.includes('Current password is incorrect')) {
+                setPasswordErrors({
+                    currentPassword: 'Current password is incorrect'
+                });
+            } else if (err.message.includes('Unable to verify your account')) {
+                toast.error('Session validation failed. Please log in again.');
+                setPasswordErrors({
+                    general: 'Your session appears to be invalid. Please log out and log in again.'
+                });
+                // Optionally redirect to login
+                // setTimeout(() => navigate('/login'), 3000);
+            } else if (err.message.includes('User not found')) {
+                toast.error('User not found. You may need to log in again.');
+                setPasswordErrors({
+                    general: 'User session error. Please log out and log in again.'
+                });
+            } else if (err.message.includes('Authentication required') || 
+                       err.message.includes('Authentication token not found')) {
+                toast.error('Your session has expired. Please log in again.');
+                setPasswordErrors({
+                    general: 'Authentication error. Please log out and log in again.'
+                });
+            } else if (err.message.includes('Network Error') || 
+                       err.message.includes('connect to server') ||
+                       err.message.includes('timed out')) {
+                toast.error('Network error. Please check your connection.');
+                setPasswordErrors({
+                    general: err.message
+                });
+            } else if (err.message.includes('System error occurred')) {
+                toast.error('A system error occurred. Our team has been notified.');
+                setPasswordErrors({
+                    general: 'System error. Please try again later.'
+                });
+            } else {
+                toast.error(err.message || 'Failed to change password');
+                setPasswordErrors({
+                    general: err.message || 'Failed to change password. Please try again later.'
+                });
+            }
+            
+        } finally {
+            setIsChangingPassword(false);
+        }
+    };
+    
     if (loading && !profile.username) {
         return (
             <UserLayout>
@@ -280,177 +427,393 @@ const ProfilePage = () => {
         );
     }
     
-    return (
-        <UserLayout>
-            <div className="profile-content">
-                {error && <Alert variant="danger" className="mt-3">{error}</Alert>}
-                
-                <Card className="profile-card mt-4">
-                    <Card.Header className="d-flex justify-content-between align-items-center">
-                        <h4 className="mb-0">Profile Information</h4>
-                        {!editMode ? (
-                            <Button variant="success" onClick={handleEdit}>
-                                <FontAwesomeIcon icon={faEdit} className="me-2" />
-                                Edit Profile
+    // Add renderPasswordTab function
+    const renderPasswordTab = () => {
+        return (
+            <Card className="profile-card">
+                <Card.Header>
+                    <h4>
+                        <FontAwesomeIcon icon={faKey} className="me-2" />
+                        Change Password
+                    </h4>
+                </Card.Header>
+                <Card.Body>
+                    {passwordErrors.general && (
+                        <Alert variant="danger" className="mb-3">
+                            {passwordErrors.general}
+                        </Alert>
+                    )}
+                    
+                    {passwordSuccess && (
+                        <Alert variant="success" className="mb-3">
+                            <FontAwesomeIcon icon={faCheck} className="me-2" />
+                            {passwordSuccess}
+                        </Alert>
+                    )}
+                    
+                    <Form onSubmit={handlePasswordSubmit}>
+                        <Form.Group className="mb-3" controlId="currentPassword">
+                            <Form.Label>
+                                <FontAwesomeIcon icon={faLock} className="me-2" />
+                                Current Password
+                            </Form.Label>
+                            <Form.Control
+                                type="password"
+                                name="currentPassword"
+                                value={passwordForm.currentPassword}
+                                onChange={handlePasswordChange}
+                                isInvalid={!!passwordErrors.currentPassword}
+                                placeholder="Enter your current password"
+                            />
+                            <Form.Control.Feedback type="invalid">
+                                {passwordErrors.currentPassword}
+                            </Form.Control.Feedback>
+                        </Form.Group>
+                        
+                        <Form.Group className="mb-3" controlId="newPassword">
+                            <Form.Label>
+                                <FontAwesomeIcon icon={faLock} className="me-2" />
+                                New Password
+                            </Form.Label>
+                            <Form.Control
+                                type="password"
+                                name="newPassword"
+                                value={passwordForm.newPassword}
+                                onChange={handlePasswordChange}
+                                isInvalid={!!passwordErrors.newPassword}
+                                placeholder="Enter new password"
+                            />
+                            <Form.Control.Feedback type="invalid">
+                                {passwordErrors.newPassword}
+                            </Form.Control.Feedback>
+                            <Form.Text className="text-muted">
+                                Password must be between 3 and 16 characters.
+                            </Form.Text>
+                        </Form.Group>
+                        
+                        <Form.Group className="mb-3" controlId="confirmPassword">
+                            <Form.Label>
+                                <FontAwesomeIcon icon={faLock} className="me-2" />
+                                Confirm New Password
+                            </Form.Label>
+                            <Form.Control
+                                type="password"
+                                name="confirmPassword"
+                                value={passwordForm.confirmPassword}
+                                onChange={handlePasswordChange}
+                                isInvalid={!!passwordErrors.confirmPassword}
+                                placeholder="Confirm new password"
+                            />
+                            <Form.Control.Feedback type="invalid">
+                                {passwordErrors.confirmPassword}
+                            </Form.Control.Feedback>
+                        </Form.Group>
+                        
+                        <div className="d-grid gap-2 mt-4">
+                            <Button
+                                variant="primary"
+                                type="submit"
+                                disabled={isChangingPassword}
+                            >
+                                {isChangingPassword ? (
+                                    <>
+                                        <Spinner
+                                            as="span"
+                                            animation="border"
+                                            size="sm"
+                                            role="status"
+                                            aria-hidden="true"
+                                            className="me-2"
+                                        />
+                                        Changing Password...
+                                    </>
+                                ) : (
+                                    'Change Password'
+                                )}
                             </Button>
-                        ) : (
-                            <div>
-                                <Button variant="success" className="me-2" onClick={handleSubmit} disabled={loading}>
-                                    <FontAwesomeIcon icon={faCheck} className="me-2" />
-                                    Save
-                                </Button>
-                                <Button variant="outline-secondary" onClick={handleCancel}>
-                                    <FontAwesomeIcon icon={faTimes} className="me-2" />
-                                    Cancel
-                                </Button>
-                            </div>
-                        )}
-                    </Card.Header>
-                    <Card.Body>
-                        <Form onSubmit={handleSubmit}>
-                            <Row>
-                                <Col md={6}>
-                                    <Form.Group className="mb-3">
-                                        <Form.Label>
-                                            <FontAwesomeIcon icon={faIdCard} className="me-2" />
-                                            Username
-                                        </Form.Label>
+                        </div>
+                    </Form>
+                </Card.Body>
+            </Card>
+        );
+    };
+    
+    const renderProfileTab = () => {
+        return (
+            <Card className="profile-card">
+                <Card.Header className="d-flex justify-content-between align-items-center">
+                    <h4 className="mb-0">
+                        <FontAwesomeIcon icon={faUser} className="me-2" />
+                        Profile Information
+                    </h4>
+                    {!editMode ? (
+                        <Button variant="success" onClick={handleEdit}>
+                            <FontAwesomeIcon icon={faEdit} className="me-2" />
+                            Edit Profile
+                        </Button>
+                    ) : (
+                        <div>
+                            <Button variant="success" className="me-2" onClick={handleSubmit} disabled={loading}>
+                                <FontAwesomeIcon icon={faCheck} className="me-2" />
+                                Save
+                            </Button>
+                            <Button variant="outline-secondary" onClick={handleCancel}>
+                                <FontAwesomeIcon icon={faTimes} className="me-2" />
+                                Cancel
+                            </Button>
+                        </div>
+                    )}
+                </Card.Header>
+                <Card.Body>
+                    {error && <Alert variant="danger" className="mb-3">{error}</Alert>}
+                    <Form onSubmit={handleSubmit}>
+                        <Row>
+                            <Col md={6}>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>
+                                        <FontAwesomeIcon icon={faIdCard} className="me-2" />
+                                        Username
+                                    </Form.Label>
+                                    <Form.Control
+                                        type="text"
+                                        value={profile.username}
+                                        disabled
+                                    />
+                                </Form.Group>
+                            </Col>
+                            <Col md={6}>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>
+                                        <FontAwesomeIcon icon={faAt} className="me-2" />
+                                        Email
+                                    </Form.Label>
+                                    <Form.Control
+                                        type="email"
+                                        name="email"
+                                        value={editMode ? editForm.email : profile.email}
+                                        onChange={handleChange}
+                                        disabled={!editMode}
+                                    />
+                                </Form.Group>
+                            </Col>
+                        </Row>
+                        
+                        <Row>
+                            <Col md={6}>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>
+                                        <FontAwesomeIcon icon={faUser} className="me-2" />
+                                        First Name
+                                    </Form.Label>
+                                    <Form.Control
+                                        type="text"
+                                        name="firstName"
+                                        value={editMode ? editForm.firstName : profile.firstName}
+                                        onChange={handleChange}
+                                        disabled={!editMode}
+                                    />
+                                </Form.Group>
+                            </Col>
+                            <Col md={6}>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>
+                                        <FontAwesomeIcon icon={faUser} className="me-2" />
+                                        Last Name
+                                    </Form.Label>
+                                    <Form.Control
+                                        type="text"
+                                        name="lastName"
+                                        value={editMode ? editForm.lastName : profile.lastName}
+                                        onChange={handleChange}
+                                        disabled={!editMode}
+                                    />
+                                </Form.Group>
+                            </Col>
+                        </Row>
+                        
+                        <Row>
+                            <Col md={6}>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>
+                                        <FontAwesomeIcon icon={faPhone} className="me-2" />
+                                        Phone Number
+                                    </Form.Label>
+                                    <Form.Control
+                                        type="tel"
+                                        name="phoneNumber"
+                                        value={editMode ? editForm.phoneNumber : profile.phoneNumber}
+                                        onChange={handleChange}
+                                        disabled={!editMode}
+                                    />
+                                </Form.Group>
+                            </Col>
+                            <Col md={6}>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>
+                                        <FontAwesomeIcon icon={faMapMarkerAlt} className="me-2" />
+                                        Address
+                                    </Form.Label>
+                                    <Form.Control
+                                        type="text"
+                                        name="address"
+                                        value={editMode ? editForm.address : profile.address}
+                                        onChange={handleChange}
+                                        disabled={!editMode}
+                                    />
+                                </Form.Group>
+                            </Col>
+                        </Row>
+
+                        <Row>
+                            <Col md={6}>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>
+                                        <FontAwesomeIcon icon={faCalendarAlt} className="me-2" />
+                                        Date of Birth
+                                    </Form.Label>
+                                    <Form.Control
+                                        type="date"
+                                        name="dateOfBirth"
+                                        value={editMode ? editForm.dateOfBirth : profile.dateOfBirth}
+                                        onChange={handleChange}
+                                        disabled={!editMode}
+                                    />
+                                </Form.Group>
+                            </Col>
+                            <Col md={6}>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>
+                                        <FontAwesomeIcon icon={faVenusMars} className="me-2" />
+                                        Gender
+                                    </Form.Label>
+                                    {editMode ? (
+                                        <Form.Select
+                                            name="gender"
+                                            value={editForm.gender}
+                                            onChange={handleChange}
+                                        >
+                                            <option value="MALE">Male</option>
+                                            <option value="FEMALE">Female</option>
+                                            <option value="OTHER">Other</option>
+                                        </Form.Select>
+                                    ) : (
                                         <Form.Control
                                             type="text"
-                                            value={profile.username}
+                                            value={getGenderDisplay(profile.gender)}
                                             disabled
                                         />
-                                    </Form.Group>
-                                </Col>
-                                <Col md={6}>
-                                    <Form.Group className="mb-3">
-                                        <Form.Label>
-                                            <FontAwesomeIcon icon={faAt} className="me-2" />
-                                            Email
-                                        </Form.Label>
-                                        <Form.Control
-                                            type="email"
-                                            name="email"
-                                            value={editMode ? editForm.email : profile.email}
-                                            onChange={handleChange}
-                                            disabled={!editMode}
-                                        />
-                                    </Form.Group>
-                                </Col>
-                            </Row>
+                                    )}
+                                </Form.Group>
+                            </Col>
+                        </Row>
+                    </Form>
+                </Card.Body>
+            </Card>
+        );
+    };
 
-                            <Row>
-                                <Col md={6}>
-                                    <Form.Group className="mb-3">
-                                        <Form.Label>
-                                            <FontAwesomeIcon icon={faUser} className="me-2" />
-                                            First Name
-                                        </Form.Label>
-                                        <Form.Control
-                                            type="text"
-                                            name="firstName"
-                                            value={editMode ? editForm.firstName : profile.firstName}
-                                            onChange={handleChange}
-                                            disabled={!editMode}
-                                        />
-                                    </Form.Group>
-                                </Col>
-                                <Col md={6}>
-                                    <Form.Group className="mb-3">
-                                        <Form.Label>
-                                            <FontAwesomeIcon icon={faUser} className="me-2" />
-                                            Last Name
-                                        </Form.Label>
-                                        <Form.Control
-                                            type="text"
-                                            name="lastName"
-                                            value={editMode ? editForm.lastName : profile.lastName}
-                                            onChange={handleChange}
-                                            disabled={!editMode}
-                                        />
-                                    </Form.Group>
-                                </Col>
-                            </Row>
-
-                            <Row>
-                                <Col md={6}>
-                                    <Form.Group className="mb-3">
-                                        <Form.Label>
-                                            <FontAwesomeIcon icon={faPhone} className="me-2" />
-                                            Phone Number
-                                        </Form.Label>
-                                        <Form.Control
-                                            type="tel"
-                                            name="phoneNumber"
-                                            value={editMode ? editForm.phoneNumber : profile.phoneNumber}
-                                            onChange={handleChange}
-                                            disabled={!editMode}
-                                        />
-                                    </Form.Group>
-                                </Col>
-                                <Col md={6}>
-                                    <Form.Group className="mb-3">
-                                        <Form.Label>
-                                            <FontAwesomeIcon icon={faMapMarkerAlt} className="me-2" />
-                                            Address
-                                        </Form.Label>
-                                        <Form.Control
-                                            type="text"
-                                            name="address"
-                                            value={editMode ? editForm.address : profile.address}
-                                            onChange={handleChange}
-                                            disabled={!editMode}
-                                        />
-                                    </Form.Group>
-                                </Col>
-                            </Row>
-
-                            <Row>
-                                <Col md={6}>
-                                    <Form.Group className="mb-3">
-                                        <Form.Label>
-                                            <FontAwesomeIcon icon={faCalendarAlt} className="me-2" />
-                                            Date of Birth
-                                        </Form.Label>
-                                        <Form.Control
-                                            type="date"
-                                            name="dateOfBirth"
-                                            value={editMode ? editForm.dateOfBirth : profile.dateOfBirth}
-                                            onChange={handleChange}
-                                            disabled={!editMode}
-                                        />
-                                    </Form.Group>
-                                </Col>
-                                <Col md={6}>
-                                    <Form.Group className="mb-3">
-                                        <Form.Label>
-                                            <FontAwesomeIcon icon={faVenusMars} className="me-2" />
-                                            Gender
-                                        </Form.Label>
-                                        {editMode ? (
-                                            <Form.Select
-                                                name="gender"
-                                                value={editForm.gender}
-                                                onChange={handleChange}
-                                            >
-                                                <option value="MALE">Male</option>
-                                                <option value="FEMALE">Female</option>
-                                                <option value="OTHER">Other</option>
-                                            </Form.Select>
-                                        ) : (
-                                            <Form.Control
-                                                type="text"
-                                                value={getGenderDisplay(profile.gender)}
-                                                disabled
-                                            />
-                                        )}
-                                    </Form.Group>
-                                </Col>
-                            </Row>
-                        </Form>
-                    </Card.Body>
-                </Card>
-            </div>
+    const renderChildrenTab = () => {
+        return (
+            <Card className="profile-card">
+                <Card.Header className="d-flex justify-content-between align-items-center">
+                    <h4 className="mb-0">
+                        <FontAwesomeIcon icon={faChild} className="me-2" />
+                        Children
+                    </h4>
+                    <Button variant="primary" onClick={() => setShowChildForm(true)}>
+                        <FontAwesomeIcon icon={faPlus} className="me-2" />
+                        Add Child
+                    </Button>
+                </Card.Header>
+                <Card.Body>
+                    {/* Your existing children rendering code */}
+                    {children.length === 0 ? (
+                        <Alert variant="info">You haven't added any children yet.</Alert>
+                    ) : (
+                        <div>
+                            {children.map(child => (
+                                <Card key={child.id} className="mb-3">
+                                    <Card.Body>
+                                        <Row>
+                                            <Col md={8}>
+                                                <h5>{child.name}</h5>
+                                                <p>
+                                                    <strong>Date of Birth:</strong> {child.dateOfBirth}
+                                                    <br />
+                                                    <strong>Gender:</strong> {getGenderDisplay(child.gender)}
+                                                </p>
+                                            </Col>
+                                            <Col md={4} className="text-end">
+                                                <Button 
+                                                    variant="outline-primary" 
+                                                    size="sm" 
+                                                    className="me-2"
+                                                    onClick={() => handleEditChild(child.id)}
+                                                >
+                                                    <FontAwesomeIcon icon={faEdit} />
+                                                </Button>
+                                                <Button 
+                                                    variant="outline-danger" 
+                                                    size="sm"
+                                                    onClick={() => handleDeleteChild(child.id)}
+                                                >
+                                                    <FontAwesomeIcon icon={faTimes} />
+                                                </Button>
+                                            </Col>
+                                        </Row>
+                                    </Card.Body>
+                                </Card>
+                            ))}
+                        </div>
+                    )}
+                </Card.Body>
+            </Card>
+        );
+    };
+    
+    return (
+        <UserLayout>
+            <Container className="py-4">
+                <h1 className="mb-4">Account Management</h1>
+                <div className="profile-container">
+                    <Tab.Container id="profile-tabs" activeKey={activeTab} onSelect={setActiveTab}>
+                        <Row>
+                            <Col md={3}>
+                                <div className="profile-sidebar">
+                                    <Card>
+                                        <Card.Body>
+                                            <Nav variant="pills" className="flex-column">
+                                                <Nav.Item>
+                                                    <Nav.Link eventKey="profile">
+                                                        <FontAwesomeIcon icon={faUser} className="me-2" />
+                                                        Profile Information
+                                                    </Nav.Link>
+                                                </Nav.Item>
+                                                <Nav.Item>
+                                                    <Nav.Link eventKey="password">
+                                                        <FontAwesomeIcon icon={faKey} className="me-2" />
+                                                        Change Password
+                                                    </Nav.Link>
+                                                </Nav.Item>
+                                            </Nav>
+                                        </Card.Body>
+                                    </Card>
+                                </div>
+                            </Col>
+                            <Col md={9}>
+                                <Tab.Content>
+                                    <Tab.Pane eventKey="profile">
+                                        {renderProfileTab()}
+                                    </Tab.Pane>
+                                    <Tab.Pane eventKey="password">
+                                        {renderPasswordTab()}
+                                    </Tab.Pane>
+                                </Tab.Content>
+                            </Col>
+                        </Row>
+                    </Tab.Container>
+                </div>
+            </Container>
         </UserLayout>
     );
 };

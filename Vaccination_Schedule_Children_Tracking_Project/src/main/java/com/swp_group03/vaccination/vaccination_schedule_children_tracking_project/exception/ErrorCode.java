@@ -34,7 +34,25 @@ public enum ErrorCode {
     // Email verification error codes
     EMAIL_ALREADY_VERIFIED(2005, "Email has already been verified"),
     VERIFICATION_CODE_EXPIRED(2006, "Verification code has expired"),
-    INVALID_VERIFICATION_CODE(2007, "Invalid verification code");
+    INVALID_VERIFICATION_CODE(2007, "Invalid verification code"),
+    EMAIL_NOT_VERIFIED(2008, "Email not verified. Please verify your email before logging in"),
+
+    UNAUTHORIZED(401, "Unauthorized"),
+    USERNAME_ALREADY_EXISTS(409, "Username already exists"),
+    EMAIL_ALREADY_EXISTS(409, "Email address already exists"),
+
+    INVALID_ROLE(400, "Invalid role"),
+    INVALID_TOKEN(401, "Invalid token"),
+    TOKEN_EXPIRED(401, "Token expired"),
+    INVALID_CREDENTIALS(401, "Invalid credentials"),
+    INVALID_PASSWORD(400, "Invalid password"),
+    INVALID_EMAIL(400, "Invalid email"),
+    INVALID_USERNAME(400, "Invalid username"),
+    INVALID_PHONE(400, "Invalid phone number"),
+    INVALID_ADDRESS(400, "Invalid address"),
+    INVALID_NAME(400, "Invalid name"),
+    INVALID_GENDER(400, "Invalid gender"),
+    INVALID_DATE(400, "Invalid date");
 
     private final int code;
     private final String message;

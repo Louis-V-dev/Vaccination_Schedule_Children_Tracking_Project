@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { Button, Col, Container, Form, Row, Card, Image } from "react-bootstrap";
+import { Button, Col, Container, Form, Row, Card, Image, Modal, InputGroup } from "react-bootstrap";
 import { Link, useNavigate } from "react-router-dom";
 import authService from "../services/authService";
 import { toast } from 'react-toastify';
-import { FaUser, FaLock, FaGoogle } from 'react-icons/fa';
+import { FaUser, FaLock, FaGoogle, FaEnvelope } from 'react-icons/fa';
 import '../css/LoginPage.css';
 
 function LoginPage() {
@@ -14,6 +14,22 @@ function LoginPage() {
 	});
 	const [errors, setErrors] = useState({});
 	const [isLoading, setIsLoading] = useState(false);
+	const [showVerificationModal, setShowVerificationModal] = useState(false);
+	const [verificationEmail, setVerificationEmail] = useState("");
+	const [resendLoading, setResendLoading] = useState(false);
+	const [verificationCode, setVerificationCode] = useState("");
+	const [verificationError, setVerificationError] = useState("");
+	const [verifyLoading, setVerifyLoading] = useState(false);
+
+	// Forgot password states
+	const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
+	const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
+	const [forgotPasswordCode, setForgotPasswordCode] = useState("");
+	const [newPassword, setNewPassword] = useState("");
+	const [confirmPassword, setConfirmPassword] = useState("");
+	const [resetStep, setResetStep] = useState(1); // 1: Enter email, 2: Verify code, 3: Set new password
+	const [forgotPasswordError, setForgotPasswordError] = useState("");
+	const [resetLoading, setResetLoading] = useState(false);
 
 	// Check if user is already logged in
 	useEffect(() => {
@@ -23,16 +39,22 @@ function LoginPage() {
 	}, [navigate]);
 
 	const handleInputChange = (e) => {
-		const { id, value } = e.target;
+		const { id, name, value } = e.target;
+		// Use name if available, otherwise extract from id
+		const fieldName = name || id.replace('txt', '').toLowerCase();
+		
 		setFormData(prev => ({
 			...prev,
-			[id.replace('txt', '').toLowerCase()]: value
+			[fieldName]: value
 		}));
+		
 		// Clear errors when user types
-		setErrors(prev => ({
-			...prev,
-			[id.replace('txt', '').toLowerCase()]: ''
-		}));
+		if (errors[fieldName]) {
+			setErrors(prev => ({
+				...prev,
+				[fieldName]: ''
+			}));
+		}
 	};
 
 	const validateForm = () => {
@@ -60,38 +82,171 @@ function LoginPage() {
 			setIsLoading(true);
 			const response = await authService.login(formData);
 			
-			if (response.code === 100 && response.result?.authenticated) {
-				localStorage.setItem('token', response.result.token);
+			if (response.success) {
 				localStorage.setItem('isLoggedIn', 'true');
 				toast.success("Login successful!");
 				navigate("/", { replace: true });
-			} else {
-				// Handle specific error codes
-				if (response.code === 1003) {
-					setErrors({ username: "Username does not exist" });
-					toast.error("Username does not exist");
-				} else if (response.code === 2003) {
-					setErrors({ password: "Invalid username or password" });
-					toast.error("Invalid username or password");
-				} else {
-					toast.error(response.message || "Login failed");
-				}
 			}
 		} catch (error) {
 			console.error('Login error:', error);
-			if (error.response?.status === 403) {
+			
+			// Handle verification error
+			if (error.isVerificationError) {
+				setVerificationEmail(error.email || "");
+				setShowVerificationModal(true);
+				toast.warning("Email verification required");
+			} else if (error.response?.status === 403) {
 				toast.error("Access denied. Please check your credentials.");
+				setErrors({ password: "Invalid username or password" });
 			} else if (error.response?.data?.code === 1003) {
 				setErrors({ username: "Username does not exist" });
 				toast.error("Username does not exist");
-			} else if (error.response?.data?.code === 2003) {
+			} else if (error.response?.data?.code === 2003 || error.message?.includes("Invalid username or password")) {
+				setErrors({ password: "Invalid username or password" });
+				toast.error("Invalid username or password");
+			} else if (error.response?.data?.code === 2004) {
 				setErrors({ password: "Invalid username or password" });
 				toast.error("Invalid username or password");
 			} else {
-				toast.error(error.response?.data?.message || "Login failed. Please try again.");
+				toast.error(error.message || "Login failed. Please try again.");
+				setErrors({ password: error.message || "Login failed. Please try again." });
 			}
 		} finally {
 			setIsLoading(false);
+		}
+	};
+
+	const handleResendVerification = async () => {
+		if (!verificationEmail) {
+			toast.error("Email address is required");
+			return;
+		}
+
+		try {
+			setResendLoading(true);
+			await authService.resendVerificationEmail(verificationEmail);
+			toast.success("Verification email sent successfully. Please check your inbox.");
+			// Don't close the modal, keep it open for code entry
+			setVerificationCode(""); // Clear any previous code
+			setVerificationError(""); // Clear any previous errors
+		} catch (error) {
+			toast.error(error.message || "Failed to resend verification email");
+		} finally {
+			setResendLoading(false);
+		}
+	};
+
+	const handleVerifyEmail = async () => {
+		if (!verificationEmail || !verificationCode) {
+			setVerificationError("Email and verification code are required");
+			return;
+		}
+
+		try {
+			setVerifyLoading(true);
+			setVerificationError("");
+			
+			const response = await authService.verifyEmail(verificationEmail, verificationCode);
+			
+			toast.success("Email verified successfully! You can now log in.");
+			setShowVerificationModal(false);
+			// Clear the verification fields
+			setVerificationCode("");
+			setVerificationError("");
+		} catch (error) {
+			setVerificationError(error.message || "Invalid verification code");
+			toast.error(error.message || "Failed to verify email");
+		} finally {
+			setVerifyLoading(false);
+		}
+	};
+
+	// Add handler for forgot password link
+	const handleForgotPasswordClick = () => {
+		setForgotPasswordEmail("");
+		setForgotPasswordCode("");
+		setNewPassword("");
+		setConfirmPassword("");
+		setForgotPasswordError("");
+		setResetStep(1);
+		setShowForgotPasswordModal(true);
+	};
+
+	// Handler to request password reset code
+	const handleRequestResetCode = async () => {
+		if (!forgotPasswordEmail) {
+			setForgotPasswordError("Email address is required");
+			return;
+		}
+
+		try {
+			setResetLoading(true);
+			await authService.requestPasswordReset(forgotPasswordEmail);
+			toast.success("Password reset code sent to your email");
+			setResetStep(2);
+			setForgotPasswordError("");
+		} catch (error) {
+			setForgotPasswordError(error.message || "Failed to send reset code");
+			toast.error(error.message || "Failed to send reset code");
+		} finally {
+			setResetLoading(false);
+		}
+	};
+
+	// Handler to verify reset code
+	const handleVerifyResetCode = async () => {
+		if (!forgotPasswordCode) {
+			setForgotPasswordError("Verification code is required");
+			return;
+		}
+
+		try {
+			setResetLoading(true);
+			// We only verify the code is valid, we don't reset the password yet
+			await authService.verifyResetCode(forgotPasswordEmail, forgotPasswordCode);
+			setResetStep(3);
+			setForgotPasswordError("");
+		} catch (error) {
+			setForgotPasswordError(error.message || "Invalid verification code");
+			toast.error(error.message || "Invalid verification code");
+		} finally {
+			setResetLoading(false);
+		}
+	};
+
+	// Handler to reset password
+	const handleResetPassword = async () => {
+		if (!newPassword) {
+			setForgotPasswordError("New password is required");
+			return;
+		}
+
+		if (newPassword.length < 3) {
+			setForgotPasswordError("Password must be at least 3 characters");
+			return;
+		}
+
+		if (newPassword !== confirmPassword) {
+			setForgotPasswordError("Passwords do not match");
+			return;
+		}
+
+		try {
+			setResetLoading(true);
+			await authService.resetPassword(forgotPasswordEmail, forgotPasswordCode, newPassword);
+			toast.success("Password reset successfully! You can now log in with your new password.");
+			setShowForgotPasswordModal(false);
+			
+			// Clear the password fields in the login form
+			setFormData(prev => ({
+				...prev,
+				password: ""
+			}));
+		} catch (error) {
+			setForgotPasswordError(error.message || "Failed to reset password");
+			toast.error(error.message || "Failed to reset password");
+		} finally {
+			setResetLoading(false);
 		}
 	};
 
@@ -119,34 +274,45 @@ function LoginPage() {
 										<span className="input-group-text">
 											<FaUser />
 										</span>
-										<Form.Control 
-											type="text" 
-											placeholder="Enter username" 
+										<Form.Control
+											type="text"
+											placeholder="Enter username"
 											value={formData.username}
 											onChange={handleInputChange}
+											name="username"
 											isInvalid={!!errors.username}
 										/>
-										<Form.Control.Feedback type="invalid">
-											{errors.username}
-										</Form.Control.Feedback>
 									</div>
+									{errors.username && (
+										<div className="error-text">
+											{errors.username}
+										</div>
+									)}
 								</Form.Group>
 
-								<Form.Group className="form-group" controlId="txtPassword">
+								<Form.Group className="form-group" controlId="txtLoginPassword">
 									<div className="input-group">
 										<span className="input-group-text">
 											<FaLock />
 										</span>
-										<Form.Control 
-											type="password" 
-											placeholder="Password" 
+										<Form.Control
+											type="password"
+											placeholder="Enter password"
 											value={formData.password}
 											onChange={handleInputChange}
+											name="password"
 											isInvalid={!!errors.password}
 										/>
-										<Form.Control.Feedback type="invalid">
+									</div>
+									{errors.password && (
+										<div className="error-text">
 											{errors.password}
-										</Form.Control.Feedback>
+										</div>
+									)}
+									<div className="text-end mt-1">
+										<a href="#" onClick={(e) => { e.preventDefault(); handleForgotPasswordClick(); }} className="text-decoration-none">
+											Forgot Password?
+										</a>
 									</div>
 								</Form.Group>
 
@@ -181,6 +347,181 @@ function LoginPage() {
 					</Card>
 				</Col>
 			</Row>
+
+			{/* Email Verification Modal */}
+			<Modal show={showVerificationModal} onHide={() => setShowVerificationModal(false)}>
+				<Modal.Header closeButton>
+					<Modal.Title>Email Verification Required</Modal.Title>
+				</Modal.Header>
+				<Modal.Body>
+					<p>Your account requires email verification before you can log in.</p>
+					<p>We've sent a verification email to your registered email address. Please check your inbox and follow the instructions to verify your account.</p>
+					
+					<Form>
+						<Form.Group className="mb-3" controlId="verificationEmailInput">
+							<Form.Label>Your registered email:</Form.Label>
+							<Form.Control
+								type="email"
+								value={verificationEmail}
+								onChange={(e) => setVerificationEmail(e.target.value)}
+								placeholder="Enter your email address"
+							/>
+							<Form.Text className="text-muted">
+								If you need a new verification email, enter your email address and click "Resend".
+							</Form.Text>
+						</Form.Group>
+
+						<Form.Group className="mb-3" controlId="verificationCodeInput">
+							<Form.Label>Verification Code:</Form.Label>
+							<Form.Control
+								type="text"
+								value={verificationCode}
+								onChange={(e) => setVerificationCode(e.target.value)}
+								placeholder="Enter the 6-digit code"
+								isInvalid={!!verificationError}
+							/>
+							<Form.Control.Feedback type="invalid">
+								{verificationError}
+							</Form.Control.Feedback>
+						</Form.Group>
+
+						<div className="d-grid gap-2">
+							<Button 
+								variant="primary" 
+								onClick={handleVerifyEmail}
+								disabled={verifyLoading}
+							>
+								{verifyLoading ? "Verifying..." : "Verify Email"}
+							</Button>
+							
+							<Button 
+								variant="outline-primary" 
+								onClick={handleResendVerification}
+								disabled={resendLoading}
+							>
+								{resendLoading ? "Sending..." : "Resend Verification Email"}
+							</Button>
+						</div>
+					</Form>
+				</Modal.Body>
+			</Modal>
+
+			{/* Forgot Password Modal */}
+			<Modal show={showForgotPasswordModal} onHide={() => setShowForgotPasswordModal(false)}>
+				<Modal.Header closeButton>
+					<Modal.Title>Reset Password</Modal.Title>
+				</Modal.Header>
+				<Modal.Body>
+					{resetStep === 1 && (
+						<>
+							<p>Enter your email address to receive a password reset code.</p>
+							<Form.Group className="mb-3" controlId="forgotPasswordEmailInput">
+								<Form.Label>Email Address</Form.Label>
+								<Form.Control
+									type="email"
+									value={forgotPasswordEmail}
+									onChange={(e) => setForgotPasswordEmail(e.target.value)}
+									placeholder="Enter your email"
+									isInvalid={!!forgotPasswordError}
+								/>
+								{forgotPasswordError && (
+									<Form.Control.Feedback type="invalid">
+										{forgotPasswordError}
+									</Form.Control.Feedback>
+								)}
+							</Form.Group>
+							<div className="d-grid">
+								<Button
+									variant="primary"
+									onClick={handleRequestResetCode}
+									disabled={resetLoading}
+								>
+									{resetLoading ? "Sending..." : "Send Reset Code"}
+								</Button>
+							</div>
+						</>
+					)}
+
+					{resetStep === 2 && (
+						<>
+							<p>Enter the verification code sent to your email.</p>
+							<Form.Group className="mb-3" controlId="forgotPasswordCodeInput">
+								<Form.Label>Verification Code</Form.Label>
+								<Form.Control
+									type="text"
+									value={forgotPasswordCode}
+									onChange={(e) => setForgotPasswordCode(e.target.value)}
+									placeholder="Enter 6-digit code"
+									isInvalid={!!forgotPasswordError}
+								/>
+								{forgotPasswordError && (
+									<Form.Control.Feedback type="invalid">
+										{forgotPasswordError}
+									</Form.Control.Feedback>
+								)}
+							</Form.Group>
+							<div className="d-grid">
+								<Button
+									variant="primary"
+									onClick={handleVerifyResetCode}
+									disabled={resetLoading}
+								>
+									{resetLoading ? "Verifying..." : "Verify Code"}
+								</Button>
+							</div>
+							<div className="text-center mt-3">
+								<Button
+									variant="link"
+									onClick={handleRequestResetCode}
+									disabled={resetLoading}
+								>
+									Resend Code
+								</Button>
+							</div>
+						</>
+					)}
+
+					{resetStep === 3 && (
+						<>
+							<p>Create a new password for your account.</p>
+							<Form.Group className="mb-3" controlId="newPasswordInput">
+								<Form.Label>New Password</Form.Label>
+								<Form.Control
+									type="password"
+									value={newPassword}
+									onChange={(e) => setNewPassword(e.target.value)}
+									placeholder="Enter new password"
+									isInvalid={!!forgotPasswordError}
+								/>
+							</Form.Group>
+							<Form.Group className="mb-3" controlId="confirmPasswordInput">
+								<Form.Label>Confirm Password</Form.Label>
+								<Form.Control
+									type="password"
+									value={confirmPassword}
+									onChange={(e) => setConfirmPassword(e.target.value)}
+									placeholder="Confirm new password"
+									isInvalid={!!forgotPasswordError}
+								/>
+								{forgotPasswordError && (
+									<Form.Control.Feedback type="invalid">
+										{forgotPasswordError}
+									</Form.Control.Feedback>
+								)}
+							</Form.Group>
+							<div className="d-grid">
+								<Button
+									variant="primary"
+									onClick={handleResetPassword}
+									disabled={resetLoading}
+								>
+									{resetLoading ? "Resetting..." : "Reset Password"}
+								</Button>
+							</div>
+						</>
+					)}
+				</Modal.Body>
+			</Modal>
 		</Container>
 	);
 }
