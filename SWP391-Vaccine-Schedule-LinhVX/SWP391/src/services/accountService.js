@@ -65,33 +65,28 @@ const accountService = {
         }
       });
 
-      // Check if we have a valid response with data
       if (response.data && response.data.result) {
         return response.data.result.map(account => ({
           id: account.accountId,
           username: account.username,
           email: account.email,
           fullName: `${account.firstName || ''} ${account.lastName || ''}`.trim(),
-          role: Array.isArray(account.roles) && account.roles.length > 0 ? account.roles[0] : 'USER',
+          roles: Array.isArray(account.roles) ? account.roles : [],
           status: account.status ? 'ACTIVE' : 'INACTIVE'
         }));
       }
       
-      // If we get here, we have a response but no data
       console.error('Invalid response format:', response.data);
       throw new Error('Invalid response format from server');
     } catch (error) {
       console.error('Error fetching accounts:', error.response?.data || error);
       
-      // Handle specific error cases
       if (error.response?.status === 403) {
         throw new Error('You do not have permission to view accounts');
       } else if (error.response?.status === 401) {
         throw new Error('Please log in to view accounts');
       }
       
-      // For other errors, return mock data
-      console.warn('Using mock data as fallback');
       return MOCK_ACCOUNTS;
     }
   },
@@ -114,13 +109,11 @@ const accountService = {
   // Create new account
   createAccount: async (accountData) => {
     try {
-      // Transform frontend data to backend format
       const backendData = {
         username: accountData.username,
         password: accountData.password,
-        firstName: accountData.fullName.split(' ').slice(0, -1).join(' '),
-        lastName: accountData.fullName.split(' ').slice(-1)[0],
         email: accountData.email,
+        roles: accountData.roles,
         status: accountData.status === 'ACTIVE'
       };
 
@@ -137,11 +130,15 @@ const accountService = {
   // Update account
   updateAccount: async (id, accountData) => {
     try {
-      // Transform frontend data to backend format
+      console.log('Updating account with data:', {
+        ...accountData,
+        password: accountData.password ? '****' : undefined
+      });
+
       const backendData = {
-        firstName: accountData.fullName.split(' ').slice(0, -1).join(' '),
-        lastName: accountData.fullName.split(' ').slice(-1)[0],
+        username: accountData.username,
         email: accountData.email,
+        roles: accountData.roles,
         status: accountData.status === 'ACTIVE'
       };
 
@@ -152,10 +149,35 @@ const accountService = {
       const response = await axios.patch(`${API_URL}/${id}`, backendData, {
         headers: getAuthHeaders()
       });
+
+      console.log('Update response:', {
+        status: response.status,
+        data: response.data
+      });
+
+      if (!response.data) {
+        throw new Error('No response data received from server');
+      }
+
       return response.data;
     } catch (error) {
-      console.error('Error updating account:', error.response?.data || error);
-      throw error;
+      console.error('Error updating account:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+
+      if (error.response?.status === 401) {
+        throw new Error('Your session has expired. Please log in again.');
+      }
+
+      if (error.response?.status === 403) {
+        throw new Error('You do not have permission to update this account.');
+      }
+
+      throw error.response?.data?.message 
+        ? new Error(error.response.data.message)
+        : error;
     }
   },
 
@@ -341,6 +363,41 @@ const accountService = {
       
       // If we get here, it's an unhandled error type
       throw new Error(error.response?.data?.message || error.message || "Failed to change password. Please try again.");
+    }
+  },
+
+  // Add getAllRoles function
+  getAllRoles: async () => {
+    try {
+      console.log('Fetching roles...');
+      const response = await axios.get(`${API_URL}/roles`, {
+        headers: getAuthHeaders()
+      });
+      
+      console.log('Roles response:', response.data);
+      
+      if (response.data && response.data.result) {
+        const roles = response.data.result.map(role => ({
+          roleId: role.roleId,
+          roleName: role.role_Name
+        }));
+        console.log('Mapped roles:', roles);
+        return roles;
+      }
+      
+      throw new Error('Invalid response format from server');
+    } catch (error) {
+      console.error('Error fetching roles:', error.response?.data || error);
+      // Return basic roles as fallback
+      const fallbackRoles = [
+        { roleId: 1, roleName: 'ADMIN' },
+        { roleId: 2, roleName: 'DOCTOR' },
+        { roleId: 3, roleName: 'NURSE' },
+        { roleId: 4, roleName: 'STAFF' },
+        { roleId: 5, roleName: 'USER' }
+      ];
+      console.log('Using fallback roles:', fallbackRoles);
+      return fallbackRoles;
     }
   }
 };

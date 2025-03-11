@@ -8,6 +8,7 @@ import RegisterPage from "./pages/RegisterPAge";
 import AccountManage from "./admin/AccountManage";
 import VaccineManage from "./admin/VaccineManage";
 import VaccineComboManage from "./admin/VaccineComboManage";
+import ScheduleManage from "./admin/ScheduleManage";
 import ProfilePage from "./user/ProfilePage";
 import ChildrenManagement from "./user/ChildrenManagement";
 
@@ -38,6 +39,7 @@ function App() {
 			<Route path={"/ManageAccount"} element={<AccountManage />} />
 			<Route path={"/ManageVaccine"} element={<VaccineManage />} />
 			<Route path={"/ManageCombo"} element={<VaccineComboManage />} />
+			<Route path={"/ManageSchedule"} element={<ScheduleManage />} />
 		</Routes>
 	);
 }

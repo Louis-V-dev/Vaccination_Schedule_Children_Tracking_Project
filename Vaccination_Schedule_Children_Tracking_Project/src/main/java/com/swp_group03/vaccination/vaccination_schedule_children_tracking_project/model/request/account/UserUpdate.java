@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
+import java.util.List;
 
 
 @Data
@@ -36,6 +37,7 @@ public class UserUpdate {
 
      Gender gender;     // Changed from Gender
      String urlImage;   // Changed from url_image
+     List<String> roles;
 
 }
 

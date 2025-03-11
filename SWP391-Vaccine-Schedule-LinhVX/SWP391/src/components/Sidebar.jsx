@@ -17,6 +17,10 @@ function Sidebar() {
 				<i className="fas fa-vials"></i>
 				Vaccine Combo
 			</NavLink>
+			<NavLink to="/ManageSchedule" className={({isActive}) => isActive ? "active" : ""}>
+				<i className="fas fa-calendar-alt"></i>
+				Manage Schedule
+			</NavLink>
 		</div>
 	);
 }

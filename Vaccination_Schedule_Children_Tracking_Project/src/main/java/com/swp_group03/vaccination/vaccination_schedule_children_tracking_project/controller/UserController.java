@@ -1,6 +1,7 @@
 package com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.controller;
 
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.Account;
+import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.Role;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.exception.AppException;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.exception.ErrorCode;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.model.request.account.UserRequest;
@@ -335,6 +336,28 @@ public class UserController {
         apiResponse.setMessage("Password changed successfully");
         apiResponse.setResult("Your password has been updated");
         return apiResponse;
+    }
+    
+    @GetMapping("/roles")
+    @Operation(summary = "Get all available roles")
+    public ApiResponse<List<Role>> getAllRoles() {
+        try {
+            ApiResponse<List<Role>> apiResponse = new ApiResponse<>();
+            List<Role> roles = userService.getAllRoles();
+            
+            // Log the roles for debugging
+            System.out.println("Fetched roles: " + roles);
+            
+            apiResponse.setResult(roles);
+            apiResponse.setCode(101);
+            apiResponse.setMessage("All roles retrieved");
+            return apiResponse;
+        } catch (Exception e) {
+            ApiResponse<List<Role>> errorResponse = new ApiResponse<>();
+            errorResponse.setCode(500);
+            errorResponse.setMessage("Error retrieving roles: " + e.getMessage());
+            return errorResponse;
+        }
     }
     
     private String generateVerificationCode() {

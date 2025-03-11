@@ -8,20 +8,22 @@ function AccountManage() {
   const [accounts, setAccounts] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState(null);
+  const [roles, setRoles] = useState([]);
   const [formData, setFormData] = useState({
     username: "",
     email: "",
     password: "",
     fullName: "",
-    role: "USER",
+    roles: [],
     status: "ACTIVE"
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Fetch accounts on component mount
+  // Fetch accounts and roles on component mount
   useEffect(() => {
     fetchAccounts();
+    fetchRoles();
   }, []);
 
   const fetchAccounts = async () => {
@@ -45,15 +47,33 @@ function AccountManage() {
     }
   };
 
+  const fetchRoles = async () => {
+    try {
+      const response = await accountService.getAllRoles();
+      console.log('Fetched roles:', response);
+      setRoles(response);
+    } catch (err) {
+      console.error("Error fetching roles:", err);
+      toast.error("Failed to fetch roles. Using default roles.");
+      // Set default roles as fallback
+      setRoles([
+        { roleId: 1, roleName: 'ADMIN' },
+        { roleId: 2, roleName: 'DOCTOR' },
+        { roleId: 3, roleName: 'NURSE' },
+        { roleId: 4, roleName: 'STAFF' },
+        { roleId: 5, roleName: 'USER' }
+      ]);
+    }
+  };
+
   const handleShowModal = (account = null) => {
     if (account) {
+      console.log('Editing account:', account);
       setSelectedAccount(account);
       setFormData({
         username: account.username,
         email: account.email,
-        password: "",
-        fullName: account.fullName,
-        role: account.role,
+        roles: Array.isArray(account.roles) ? account.roles : [],
         status: account.status
       });
     } else {
@@ -61,9 +81,7 @@ function AccountManage() {
       setFormData({
         username: "",
         email: "",
-        password: "",
-        fullName: "",
-        role: "USER",
+        roles: [],
         status: "ACTIVE"
       });
     }
@@ -76,37 +94,62 @@ function AccountManage() {
     setFormData({
       username: "",
       email: "",
-      password: "",
-      fullName: "",
-      role: "USER",
+      roles: [],
       status: "ACTIVE"
     });
   };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    if (name === 'roles') {
+      setFormData(prev => ({
+        ...prev,
+        roles: value ? [value] : []
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       setLoading(true);
+      setError("");
+
+      const submitData = {
+        username: formData.username,
+        email: formData.email,
+        roles: formData.roles,
+        status: formData.status === 'ACTIVE'
+      };
+
+      console.log('Submitting account data:', submitData);
+
       if (selectedAccount) {
-        await accountService.updateAccount(selectedAccount.id, formData);
+        const result = await accountService.updateAccount(selectedAccount.id, submitData);
+        console.log('Update result:', result);
         toast.success("Account updated successfully");
       } else {
-        await accountService.createAccount(formData);
+        if (!formData.password) {
+          throw new Error("Password is required for new accounts");
+        }
+        submitData.password = formData.password;
+        const result = await accountService.createAccount(submitData);
+        console.log('Create result:', result);
         toast.success("Account created successfully");
       }
+      
       handleCloseModal();
-      fetchAccounts();
+      await fetchAccounts();
     } catch (err) {
-      setError(err.response?.data?.message || "An error occurred");
-      toast.error(err.response?.data?.message || "An error occurred");
+      console.error('Error in handleSubmit:', err);
+      const errorMessage = err.response?.data?.message || err.message || "An error occurred";
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -163,9 +206,21 @@ function AccountManage() {
                     <td>{account.email}</td>
                     <td>{account.fullName}</td>
                     <td>
-                      <span className={`badge bg-${account.role === 'ADMIN' ? 'danger' : account.role === 'DOCTOR' ? 'success' : 'primary'}`}>
-                        {account.role}
-                      </span>
+                      {account.roles && account.roles.length > 0 ? (
+                        <span
+                          className={`badge bg-${
+                            account.roles[0] === 'ADMIN' ? 'danger' :
+                            account.roles[0] === 'DOCTOR' ? 'success' :
+                            account.roles[0] === 'NURSE' ? 'info' :
+                            account.roles[0] === 'STAFF' ? 'warning' :
+                            'primary'
+                          }`}
+                        >
+                          {account.roles[0]}
+                        </span>
+                      ) : (
+                        <span className="badge bg-secondary">No role</span>
+                      )}
                     </td>
                     <td>
                       <span className={`badge bg-${account.status === 'ACTIVE' ? 'success' : 'secondary'}`}>
@@ -218,6 +273,7 @@ function AccountManage() {
                   value={formData.username}
                   onChange={handleInputChange}
                   required
+                  disabled={selectedAccount}
                 />
               </Form.Group>
 
@@ -233,38 +289,18 @@ function AccountManage() {
               </Form.Group>
 
               <Form.Group className="mb-3">
-                <Form.Label>Password</Form.Label>
-                <Form.Control
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  required={!selectedAccount}
-                  placeholder={selectedAccount ? "Leave blank to keep current password" : ""}
-                />
-              </Form.Group>
-
-              <Form.Group className="mb-3">
-                <Form.Label>Full Name</Form.Label>
-                <Form.Control
-                  type="text"
-                  name="fullName"
-                  value={formData.fullName}
-                  onChange={handleInputChange}
-                  required
-                />
-              </Form.Group>
-
-              <Form.Group className="mb-3">
-                <Form.Label>Role</Form.Label>
+                <Form.Label>Roles</Form.Label>
                 <Form.Select
-                  name="role"
-                  value={formData.role}
+                  name="roles"
+                  value={formData.roles}
                   onChange={handleInputChange}
                 >
-                  <option value="USER">User</option>
-                  <option value="ADMIN">Admin</option>
-                  <option value="DOCTOR">Doctor</option>
+                  <option value="">Select Role</option>
+                  {roles.map(role => (
+                    <option key={role.roleId} value={role.roleName}>
+                      {role.roleName}
+                    </option>
+                  ))}
                 </Form.Select>
               </Form.Group>
 

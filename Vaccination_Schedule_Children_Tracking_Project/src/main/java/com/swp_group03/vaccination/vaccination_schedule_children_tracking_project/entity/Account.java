@@ -229,6 +229,10 @@ public class Account {
         this.emailVerified = emailVerified;
     }
 
+    public String getFullName() {
+        return firstName + " " + lastName;
+    }
+
     //
 //    public Account(String username, String password, String first_Name, String last_Name, String email,
 //                   String phone_number, String address, String gender, boolean status, String url_image,

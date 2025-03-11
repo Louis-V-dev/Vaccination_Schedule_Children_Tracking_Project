@@ -191,13 +191,28 @@ const authService = {
             }
             
             if (response.data && response.data.code === 100) {
+                const token = response.data.result.token;
+                
                 // Store the token in localStorage
-                localStorage.setItem('token', response.data.result.token);
+                localStorage.setItem('token', token);
+                
+                // Extract roles from JWT token
+                try {
+                    const tokenParts = token.split('.');
+                    if (tokenParts.length === 3) {
+                        const payload = JSON.parse(atob(tokenParts[1]));
+                        if (payload.roles) {
+                            localStorage.setItem('roles', JSON.stringify(payload.roles));
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error extracting roles from token:', e);
+                }
                 
                 // Return successful login response
                 return {
                     success: true,
-                    token: response.data.result.token,
+                    token: token,
                     message: "Login successful"
                 };
             } else {
