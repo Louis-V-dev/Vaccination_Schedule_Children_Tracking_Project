@@ -38,7 +38,7 @@ public class SchedulePattern {
     @Column(name = "is_active")
     boolean active;
     
-    @OneToMany(mappedBy = "pattern", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "pattern", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @Builder.Default
     List<PatternShift> shifts = new ArrayList<>();
     

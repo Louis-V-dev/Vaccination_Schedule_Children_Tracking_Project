@@ -196,7 +196,7 @@ const authService = {
                 // Store the token in localStorage
                 localStorage.setItem('token', token);
                 
-                // Extract roles from JWT token
+                // Extract user info from JWT token
                 try {
                     const tokenParts = token.split('.');
                     if (tokenParts.length === 3) {
@@ -204,9 +204,13 @@ const authService = {
                         if (payload.roles) {
                             localStorage.setItem('roles', JSON.stringify(payload.roles));
                         }
+                        // Store user ID from token
+                        if (payload.sub) {
+                            localStorage.setItem('userId', payload.sub);
+                        }
                     }
                 } catch (e) {
-                    console.error('Error extracting roles from token:', e);
+                    console.error('Error extracting data from token:', e);
                 }
                 
                 // Return successful login response
@@ -252,7 +256,11 @@ const authService = {
     },
 
     logout: () => {
+        // Clear all authentication-related data
         localStorage.removeItem('token');
+        localStorage.removeItem('roles');
+        localStorage.removeItem('userId');
+        localStorage.removeItem('isLoggedIn');
         window.location.href = '/login';
     },
 

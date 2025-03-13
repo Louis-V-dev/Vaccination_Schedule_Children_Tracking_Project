@@ -11,6 +11,7 @@ import VaccineComboManage from "./admin/VaccineComboManage";
 import ScheduleManage from "./admin/ScheduleManage";
 import ProfilePage from "./user/ProfilePage";
 import ChildrenManagement from "./user/ChildrenManagement";
+import WorkScheduleView from "./employee/components/WorkScheduleView";
 
 // Create placeholder components for the routes we'll implement later
 const BookingPage = () => <div>Booking Schedule page will be implemented soon.</div>;
@@ -40,6 +41,8 @@ function App() {
 			<Route path={"/ManageVaccine"} element={<VaccineManage />} />
 			<Route path={"/ManageCombo"} element={<VaccineComboManage />} />
 			<Route path={"/ManageSchedule"} element={<ScheduleManage />} />
+			<Route path={"/WorkSchedule"} element={<WorkScheduleView />} />
+			<Route path={"/shift-requests"} element={<WorkScheduleView activeTab="requests" />} />
 		</Routes>
 	);
 }

@@ -132,15 +132,25 @@ public class PatternService {
         generateSchedulesFromPattern(pattern, startDate, 4);
     }
     
+    @Transactional
     public void deletePattern(Long patternId) {
         SchedulePattern pattern = patternRepository.findById(patternId)
                 .orElseThrow(() -> new AppException(ErrorCode.PATTERN_NOT_FOUND));
+
+        // Check if pattern is being used in future schedules
+        List<WorkSchedule> futureSchedules = workScheduleRepository
+                .findBySourcePatternAndWorkDateGreaterThanEqual(pattern, LocalDate.now());
         
-        // Delete associated work schedules first
-        List<WorkSchedule> schedules = workScheduleRepository.findBySourcePattern(pattern);
-        workScheduleRepository.deleteAll(schedules);
-        
-        // Delete the pattern (this will cascade delete pattern shifts due to CascadeType.ALL)
+        if (!futureSchedules.isEmpty()) {
+            // Delete future schedules first
+            workScheduleRepository.deleteAll(futureSchedules);
+        }
+
+        // Delete pattern shifts
+        List<PatternShift> patternShifts = patternShiftRepository.findByPattern(pattern);
+        patternShiftRepository.deleteAll(patternShifts);
+
+        // Finally delete the pattern
         patternRepository.delete(pattern);
     }
     

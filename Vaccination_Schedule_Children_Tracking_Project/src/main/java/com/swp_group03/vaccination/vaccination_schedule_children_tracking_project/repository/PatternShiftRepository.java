@@ -12,4 +12,5 @@ public interface PatternShiftRepository extends JpaRepository<PatternShift, Long
     List<PatternShift> findByPattern(SchedulePattern pattern);
     List<PatternShift> findByPatternAndWeekNumber(SchedulePattern pattern, int weekNumber);
     List<PatternShift> findByPatternAndWeekNumberAndDayOfWeek(SchedulePattern pattern, int weekNumber, int dayOfWeek);
+    void deleteByPattern(SchedulePattern pattern);
 } 

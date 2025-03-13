@@ -17,11 +17,11 @@ public class PatternShift {
     @Column(name = "pattern_shift_id")
     Long id;
     
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "pattern_id")
     SchedulePattern pattern;
     
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "shift_id")
     Shift shift;
     

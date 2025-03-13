@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Button, Modal, Form, Row, Col } from 'react-bootstrap';
+import { Card, Table, Button, Modal, Form, Row, Col, Badge } from 'react-bootstrap';
 import { toast } from 'react-toastify';
 import { FaEdit, FaTrash, FaPlus } from 'react-icons/fa';
 import { shiftService } from '../../services/scheduleService';
@@ -48,12 +48,29 @@ const ShiftManagement = () => {
                 `${sortField},${sortDirection}`,
                 filterText
             );
-            setShifts(response.result.content);
-            setTotalPages(response.result.totalPages);
-            setTotalElements(response.result.totalElements);
+            console.log('Raw shifts response:', response); // Debug log
+            
+            // Get shifts array from response
+            let shiftsData = [];
+            if (response?.result?.content) {
+                shiftsData = response.result.content;
+                setTotalPages(response.result.totalPages);
+                setTotalElements(response.result.totalElements);
+            } else if (Array.isArray(response?.result)) {
+                shiftsData = response.result;
+                setTotalPages(Math.ceil(shiftsData.length / pageSize));
+                setTotalElements(shiftsData.length);
+            }
+            
+            console.log('Shifts to display:', shiftsData); // Debug log
+            setShifts(shiftsData);
+            
         } catch (error) {
             toast.error(error.message || 'Failed to fetch shifts');
             console.error('Error fetching shifts:', error);
+            setShifts([]);
+            setTotalPages(0);
+            setTotalElements(0);
         } finally {
             setLoading(false);
         }
@@ -126,18 +143,13 @@ const ShiftManagement = () => {
             if (editingShift) {
                 await shiftService.updateShift(editingShift.id, formData);
                 toast.success('Shift updated successfully');
+                handleModalClose(); // Close modal after successful update
+                await fetchShifts(); // Refresh the shifts list
             } else {
                 const response = await shiftService.createShift(formData);
                 if (response.code === 100) {
                     toast.success('Shift created successfully');
-                    // Reset form immediately after successful creation
-                    setFormData({
-                        name: '',
-                        startTime: '',
-                        endTime: '',
-                        status: true
-                    });
-                    handleModalClose();
+                    handleModalClose(); // Close modal after successful creation
                     await fetchShifts(); // Refresh the shifts list
                 }
             }
@@ -207,11 +219,15 @@ const ShiftManagement = () => {
                     </thead>
                     <tbody>
                         {shifts.map(shift => (
-                            <tr key={shift.id}>
+                            <tr key={shift.id} className={!shift.status ? 'table-secondary' : ''}>
                                 <td>{shift.name}</td>
                                 <td>{shift.startTime}</td>
                                 <td>{shift.endTime}</td>
-                                <td>{shift.status ? 'Active' : 'Inactive'}</td>
+                                <td>
+                                    <Badge bg={shift.status ? 'success' : 'danger'}>
+                                        {shift.status ? 'Active' : 'Inactive'}
+                                    </Badge>
+                                </td>
                                 <td>
                                     <Button 
                                         variant="primary" 

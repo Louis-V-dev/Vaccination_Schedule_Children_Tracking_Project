@@ -1,0 +1,1 @@
+This directory will store carousel images for the homepage.

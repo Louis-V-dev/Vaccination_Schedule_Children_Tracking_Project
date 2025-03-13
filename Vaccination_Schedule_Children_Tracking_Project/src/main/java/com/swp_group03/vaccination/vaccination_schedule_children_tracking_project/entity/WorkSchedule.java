@@ -42,4 +42,14 @@ public class WorkSchedule {
     
     @Column(name = "generation_date")
     LocalDateTime generationDate;
+    
+    // New fields for vaccination appointment management
+    @Column(name = "is_available")
+    Boolean isAvailable = true;
+    
+    @Column(name = "booked_appointments")
+    Integer bookedAppointments = 0;
+    
+    @Column(name = "max_appointments_per_day")
+    Integer maxAppointmentsPerDay = 10;
 } 

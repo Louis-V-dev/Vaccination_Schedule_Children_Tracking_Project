@@ -79,7 +79,7 @@ public class ShiftService {
     }
     
     public List<Shift> getAllShifts() {
-        return shiftRepository.findByStatusTrue();
+        return shiftRepository.findAll();
     }
     
     public Shift getShiftById(Long id) {

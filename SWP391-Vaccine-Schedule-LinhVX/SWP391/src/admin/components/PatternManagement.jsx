@@ -61,10 +61,22 @@ const PatternManagement = () => {
     
     const fetchShifts = async () => {
         try {
-            const data = await shiftService.getAllShifts();
-            setShifts(data.filter(shift => shift.status));
+            const response = await shiftService.getAllShifts();
+            console.log('Fetched shifts:', response); // Debug log
+            
+            if (response && Array.isArray(response.result)) {
+                const activeShifts = response.result.filter(shift => shift.status);
+                console.log('Active shifts:', activeShifts); // Debug log
+                setShifts(activeShifts);
+            } else {
+                console.error('Invalid shifts response structure:', response);
+                toast.error('Failed to load shifts: Invalid response format');
+                setShifts([]); // Set empty array as fallback
+            }
         } catch (err) {
+            console.error('Error fetching shifts:', err); // Debug log
             toast.error('Failed to load shifts');
+            setShifts([]); // Set empty array as fallback
         }
     };
     
@@ -115,14 +127,13 @@ const PatternManagement = () => {
     
     const handleEditPattern = (pattern) => {
         setSelectedPattern(pattern);
-        
-        // Map backend pattern to form structure
-        const patternShifts = [];
+        console.log('Pattern data:', pattern);
         
         // Initialize with empty shifts for all days
+        const emptyShifts = [];
         for (let week = 1; week <= 4; week++) {
             for (let day = 1; day <= 7; day++) {
-                patternShifts.push({
+                emptyShifts.push({
                     weekNumber: week,
                     dayOfWeek: day,
                     shiftId: null
@@ -130,28 +141,35 @@ const PatternManagement = () => {
             }
         }
         
-        // Fill in the shifts from the pattern
-        pattern.weeks.forEach(week => {
-            week.days.forEach((day, index) => {
-                if (day) {
-                    const dayIndex = patternShifts.findIndex(
-                        shift => shift.weekNumber === week.weekNumber && shift.dayOfWeek === index + 1
-                    );
-                    
-                    if (dayIndex !== -1) {
-                        patternShifts[dayIndex].shiftId = day.id;
-                    }
+        // Fill in the shifts from the pattern's patternShifts
+        if (pattern.patternShifts && Array.isArray(pattern.patternShifts)) {
+            console.log('Pattern shifts:', pattern.patternShifts); // Debug log
+            pattern.patternShifts.forEach(patternShift => {
+                console.log('Processing shift:', patternShift); // Debug log
+                const shiftIndex = emptyShifts.findIndex(
+                    shift => shift.weekNumber === patternShift.weekNumber && 
+                            shift.dayOfWeek === patternShift.dayOfWeek
+                );
+                console.log('Found at index:', shiftIndex); // Debug log
+                if (shiftIndex !== -1) {
+                    // Get the shift ID directly from patternShift
+                    const shiftId = patternShift.shiftId || (patternShift.shift ? patternShift.shift.id : null);
+                    console.log('Setting shift ID:', shiftId); // Debug log
+                    emptyShifts[shiftIndex].shiftId = shiftId;
                 }
             });
-        });
-        
+        }
+
+        console.log('Final shifts array:', emptyShifts); // Debug log
+
         setFormData({
-            name: pattern.name,
-            employeeId: pattern.employeeId,
-            shifts: patternShifts,
+            name: pattern.name || '',
+            employeeId: pattern.employeeId || '',
+            shifts: emptyShifts,
             regenerateSchedules: false
         });
         
+        setSelectedRole('');
         setModalMode('edit');
         setShowModal(true);
     };
@@ -177,7 +195,8 @@ const PatternManagement = () => {
             setLoading(true);
             await scheduleService.deletePattern(patternId);
             toast.success('Pattern deleted successfully');
-            fetchPatterns(); // Refresh the list
+            // Refresh the patterns list
+            fetchPatterns();
         } catch (err) {
             toast.error(err.message || 'Failed to delete pattern');
         } finally {
@@ -201,7 +220,11 @@ const PatternManagement = () => {
             
             const submitData = {
                 ...formData,
-                shifts: validShifts
+                shifts: validShifts.map(shift => ({
+                    weekNumber: shift.weekNumber,
+                    dayOfWeek: shift.dayOfWeek,
+                    shiftId: shift.shiftId
+                }))
             };
             
             if (modalMode === 'create') {
@@ -226,6 +249,18 @@ const PatternManagement = () => {
             s => s.weekNumber === weekNum && s.dayOfWeek === dayOfWeek
         );
         return shift ? shift.shiftId || '' : '';
+    };
+    
+    const getShiftName = (shiftId) => {
+        if (!shiftId) return 'No Shift';
+        console.log('Looking for shift with ID:', shiftId); // Debug log
+        console.log('Available shifts:', shifts); // Debug log
+        const shift = shifts.find(s => s.id === shiftId);
+        if (!shift) {
+            console.log('Shift not found for ID:', shiftId); // Debug log
+            return 'No Shift';
+        }
+        return `${shift.name} (${shift.startTime} - ${shift.endTime})`;
     };
     
     const updateShiftForDay = (weekNum, dayOfWeek, shiftId) => {
@@ -352,41 +387,43 @@ const PatternManagement = () => {
                             />
                         </Form.Group>
                         
-                        <Row className="mb-3">
-                            <Col md={6}>
-                                <Form.Group>
-                                    <Form.Label>Role</Form.Label>
-                                    <Form.Select 
-                                        value={selectedRole}
-                                        onChange={(e) => handleRoleChange(e.target.value)}
-                                    >
-                                        <option value="">Select Role</option>
-                                        {roles.map(role => (
-                                            <option key={role.id} value={role.id}>
-                                                {role.name}
-                                            </option>
-                                        ))}
-                                    </Form.Select>
-                                </Form.Group>
-                            </Col>
-                            <Col md={6}>
-                                <Form.Group>
-                                    <Form.Label>Employee</Form.Label>
-                                    <Form.Select
-                                        value={formData.employeeId}
-                                        onChange={(e) => setFormData({...formData, employeeId: e.target.value})}
-                                        required
-                                    >
-                                        <option value="">Select Employee</option>
-                                        {employees.map(emp => (
-                                            <option key={emp.id} value={emp.id}>
-                                                {emp.fullName}
-                                            </option>
-                                        ))}
-                                    </Form.Select>
-                                </Form.Group>
-                            </Col>
-                        </Row>
+                        {modalMode === 'create' && (
+                            <Row className="mb-3">
+                                <Col md={6}>
+                                    <Form.Group>
+                                        <Form.Label>Role</Form.Label>
+                                        <Form.Select 
+                                            value={selectedRole}
+                                            onChange={(e) => handleRoleChange(e.target.value)}
+                                        >
+                                            <option value="">Select Role</option>
+                                            {roles.map(role => (
+                                                <option key={role.id} value={role.id}>
+                                                    {role.name}
+                                                </option>
+                                            ))}
+                                        </Form.Select>
+                                    </Form.Group>
+                                </Col>
+                                <Col md={6}>
+                                    <Form.Group>
+                                        <Form.Label>Employee</Form.Label>
+                                        <Form.Select
+                                            value={formData.employeeId}
+                                            onChange={(e) => setFormData({...formData, employeeId: e.target.value})}
+                                            required
+                                        >
+                                            <option value="">Select Employee</option>
+                                            {employees.map(employee => (
+                                                <option key={employee.id} value={employee.id}>
+                                                    {employee.fullName}
+                                                </option>
+                                            ))}
+                                        </Form.Select>
+                                    </Form.Group>
+                                </Col>
+                            </Row>
+                        )}
                         
                         {modalMode === 'edit' && (
                             <Form.Group className="mb-3">

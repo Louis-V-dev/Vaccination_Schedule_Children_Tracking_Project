@@ -9,10 +9,47 @@ const getAuthHeaders = () => {
         console.error('No token found in localStorage');
         return {};
     }
-    return {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-    };
+
+    try {
+        // Decode token payload
+        const tokenParts = token.split('.');
+        if (tokenParts.length !== 3) {
+            console.error('Invalid token format');
+            return {};
+        }
+
+        const payload = JSON.parse(atob(tokenParts[1]));
+        console.log('Token payload:', payload);
+
+        // Store user information
+        if (payload.sub) {
+            localStorage.setItem('userId', payload.sub);
+            console.log('Updated userId from token:', payload.sub);
+        }
+
+        if (payload.roles && Array.isArray(payload.roles)) {
+            localStorage.setItem('roles', JSON.stringify(payload.roles));
+            console.log('Updated roles from token:', payload.roles);
+        }
+
+        // Store complete user info
+        const userInfo = {
+            id: payload.sub,
+            roles: payload.roles || [],
+            exp: payload.exp,
+            email: payload.email
+        };
+        localStorage.setItem('user', JSON.stringify(userInfo));
+        console.log('Stored user info:', userInfo);
+
+        return {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        };
+    } catch (e) {
+        console.error('Error validating token:', e);
+        return {};
+    }
 };
 
 // Debug user role information in browser console
@@ -77,33 +114,86 @@ const handleError = (error) => {
 const scheduleService = {
     getMySchedules: async (startDate, endDate) => {
         try {
+            const headers = getAuthHeaders();
+            if (!Object.keys(headers).length) {
+                throw new Error('Authentication token not found or invalid');
+            }
+
             const userId = localStorage.getItem('userId');
+            if (!userId) {
+                throw new Error('User ID not found');
+            }
+
+            console.log('Fetching schedules for user:', userId);
+            console.log('Date range:', { startDate, endDate });
+
             const response = await axios.get(`${API_URL}/employee/schedules/${userId}`, {
-                headers: getAuthHeaders(),
+                headers,
                 params: { startDate, endDate }
             });
-            return response.data.result;
+
+            console.log('Schedule response:', response.data);
+            return response.data.result || [];
         } catch (error) {
+            console.error('Error fetching schedules:', error);
+            if (error.response?.status === 400 || error.response?.status === 403) {
+                return [];
+            }
             throw handleError(error);
         }
     },
 
     getSameRoleSchedules: async (startDate, endDate) => {
         try {
-            // Use appropriate endpoint based on user role
-            const endpoint = isAdmin() 
-                ? `${API_URL}/admin/schedules` 
-                : `${API_URL}/employee/schedules/same-role`;
-                
-            const response = await axios.get(endpoint, {
-                headers: getAuthHeaders(),
+            const headers = getAuthHeaders();
+            if (!Object.keys(headers).length) {
+                throw new Error('Authentication token not found or invalid');
+            }
+
+            const userInfo = JSON.parse(localStorage.getItem('user') || '{}');
+            console.log('User info for role check:', userInfo);
+
+            // Get user ID from localStorage
+            const userId = localStorage.getItem('userId');
+            if (!userId) {
+                throw new Error('User ID not found');
+            }
+
+            console.log('Fetching schedules for user:', userId);
+            console.log('Date range:', { startDate, endDate });
+
+            // Use the regular employee schedules endpoint
+            const response = await axios.get(`${API_URL}/employee/schedules/${userId}`, {
+                headers,
                 params: { startDate, endDate }
             });
-            console.log('Same role schedules response:', response.data);
-            return response.data.result || [];
+
+            console.log('Employee schedules response:', response.data);
+            if (!response.data.result) {
+                console.warn('No schedules found in response');
+                return [];
+            }
+
+            // Extract schedules with same-role employees
+            const schedules = response.data.result;
+            
+            // Log the number of schedules with same-role employees
+            const schedulesWithSameRoleEmployees = schedules.filter(
+                schedule => schedule.sameRoleEmployees && schedule.sameRoleEmployees.length > 0
+            );
+            
+            console.log(`Found ${schedulesWithSameRoleEmployees.length} schedules with same-role employees`);
+            
+            return schedules;
         } catch (error) {
             console.error('Error fetching same role schedules:', error);
-            // Return empty array instead of throwing error
+            console.error('Error details:', {
+                status: error.response?.status,
+                statusText: error.response?.statusText,
+                data: error.response?.data,
+                url: error.config?.url,
+                params: error.config?.params
+            });
             return [];
         }
     },
@@ -310,23 +400,91 @@ const scheduleService = {
 
     getSentRequests: async () => {
         try {
+            // Get auth headers which will validate token and update userId
+            const headers = getAuthHeaders();
+            if (!Object.keys(headers).length) {
+                console.error('Authentication headers not available');
+                return [];
+            }
+
+            const userId = localStorage.getItem('userId');
+            if (!userId) {
+                console.error('User ID not found in localStorage');
+                return [];
+            }
+            
+            console.log('Making sent requests API call with userId:', userId);
             const response = await axios.get(`${API_URL}/employee/schedules/shift-change-requests/sent`, {
-                headers: getAuthHeaders()
+                headers,
+                params: { employeeId: userId }
             });
+            
+            console.log('Sent requests response:', response.data);
+            
+            if (!response.data || !response.data.result) {
+                console.warn('No sent requests data in response:', response);
+                return [];
+            }
+            
             return response.data.result;
         } catch (error) {
-            throw handleError(error);
+            console.error('Error fetching sent requests:', error);
+            console.error('Error details:', {
+                status: error.response?.status,
+                statusText: error.response?.statusText,
+                data: error.response?.data,
+                message: error.message,
+                url: error.config?.url,
+                params: error.config?.params
+            });
+            
+            // Return empty array for any error
+            return [];
         }
     },
 
     getReceivedRequests: async () => {
         try {
+            // Get auth headers which will validate token and update userId
+            const headers = getAuthHeaders();
+            if (!Object.keys(headers).length) {
+                console.error('Authentication headers not available');
+                return [];
+            }
+
+            const userId = localStorage.getItem('userId');
+            if (!userId) {
+                console.error('User ID not found in localStorage');
+                return [];
+            }
+            
+            console.log('Making received requests API call with userId:', userId);
             const response = await axios.get(`${API_URL}/employee/schedules/shift-change-requests/received`, {
-                headers: getAuthHeaders()
+                headers,
+                params: { employeeId: userId }
             });
+            
+            console.log('Received requests response:', response.data);
+            
+            if (!response.data || !response.data.result) {
+                console.warn('No received requests data in response:', response);
+                return [];
+            }
+            
             return response.data.result;
         } catch (error) {
-            throw handleError(error);
+            console.error('Error fetching received requests:', error);
+            console.error('Error details:', {
+                status: error.response?.status,
+                statusText: error.response?.statusText,
+                data: error.response?.data,
+                message: error.message,
+                url: error.config?.url,
+                params: error.config?.params
+            });
+            
+            // Return empty array for any error
+            return [];
         }
     },
 
@@ -429,60 +587,22 @@ const scheduleService = {
 
 // Shift Management
 const shiftService = {
-    getAllShifts: async (page = 0, size = 100, sort = 'name,asc') => {
+    getAllShifts: async (page = 0, size = 100, sort = 'name,asc', filterText = '') => {
         try {
-            console.log('Calling shifts API with params:', { page, size, sort });
+            console.log('Fetching shifts with params:', { page, size, sort, filterText }); // Debug log
             const response = await axios.get(`${API_URL}/admin/shifts`, {
                 headers: getAuthHeaders(),
-                params: { page, size, sort }
+                params: {
+                    page,
+                    size,
+                    sort,
+                    filterText
+                }
             });
-            console.log('Shifts API response:', response.data);
             return response.data;
         } catch (error) {
             console.error('Error fetching shifts:', error);
-            console.error('Error details:', {
-                status: error.response?.status,
-                statusText: error.response?.statusText,
-                data: error.response?.data,
-                url: error.config?.url,
-                params: error.config?.params,
-                headers: error.config?.headers
-            });
-
-            // Return a properly structured fallback response
-            return {
-                code: 100,
-                message: 'Using default shifts',
-                result: {
-                    content: [
-                        {
-                            id: '1',
-                            name: 'Morning Shift',
-                            startTime: '07:00',
-                            endTime: '15:00',
-                            status: true
-                        },
-                        {
-                            id: '2',
-                            name: 'Afternoon Shift',
-                            startTime: '15:00',
-                            endTime: '23:00',
-                            status: true
-                        },
-                        {
-                            id: '3',
-                            name: 'Night Shift',
-                            startTime: '23:00',
-                            endTime: '07:00',
-                            status: true
-                        }
-                    ],
-                    totalElements: 3,
-                    totalPages: 1,
-                    number: 0,
-                    size: 100
-                }
-            };
+            return { result: [], message: error.message };
         }
     },
 

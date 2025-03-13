@@ -121,46 +121,22 @@ public class PatternController {
     }
     
     private PatternResponseDTO toPatternResponseDTO(SchedulePattern pattern) {
-        // Initialize empty week structure
-        List<WeekDTO> weeks = new ArrayList<>();
-        for (int i = 1; i <= 4; i++) {
-            List<ShiftResponse> days = new ArrayList<>();
-            for (int j = 0; j < 7; j++) {
-                days.add(null); // Initialize with null days
-            }
-            
-            weeks.add(WeekDTO.builder()
-                    .weekNumber(i)
-                    .days(days)
-                    .build());
-        }
-        
-        // Fill in shifts
-        for (PatternShift shift : pattern.getShifts()) {
-            int weekIndex = shift.getWeekNumber() - 1;
-            int dayIndex = shift.getDayOfWeek() - 1;
-            
-            Shift shiftEntity = shift.getShift();
-            ShiftResponse shiftResponse = ShiftResponse.builder()
-                    .id(shiftEntity.getId())
-                    .name(shiftEntity.getName())
-                    .startTime(shiftEntity.getStartTime().format(TIME_FORMATTER))
-                    .endTime(shiftEntity.getEndTime().format(TIME_FORMATTER))
-                    .status(shiftEntity.isStatus())
-                    .build();
-            
-            weeks.get(weekIndex).getDays().set(dayIndex, shiftResponse);
-        }
-        
         return PatternResponseDTO.builder()
                 .id(pattern.getId())
                 .name(pattern.getName())
                 .employeeId(pattern.getEmployee().getAccountId())
-                .employeeName(pattern.getEmployee().getFirstName() + " " + pattern.getEmployee().getLastName())
+                .employeeName(pattern.getEmployee().getFullName())
                 .creationDate(pattern.getCreationDate())
                 .lastModified(pattern.getLastModified())
                 .active(pattern.isActive())
-                .weeks(weeks)
+                .patternShifts(pattern.getShifts().stream()
+                        .map(patternShift -> PatternResponseDTO.PatternShiftDTO.builder()
+                                .id(patternShift.getId())
+                                .weekNumber(patternShift.getWeekNumber())
+                                .dayOfWeek(patternShift.getDayOfWeek())
+                                .shift(ShiftResponse.fromEntity(patternShift.getShift()))
+                                .build())
+                        .collect(Collectors.toList()))
                 .build();
     }
 } 

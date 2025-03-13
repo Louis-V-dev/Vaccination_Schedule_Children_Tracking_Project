@@ -56,22 +56,12 @@ public class ShiftController {
 
     @GetMapping
     @Operation(summary = "Get all shifts")
-    public ApiResponse<Page<ShiftResponse>> getAllShifts(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "name,asc") String sort) {
-        
-        String[] sortParams = sort.split(",");
-        String sortField = sortParams[0];
-        Sort.Direction direction = sortParams.length > 1 && sortParams[1].equalsIgnoreCase("desc") ? 
-            Sort.Direction.DESC : Sort.Direction.ASC;
-        
-        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortField));
-        Page<Shift> shiftsPage = shiftService.getAllShifts(pageable);
-        
-        Page<ShiftResponse> responsePage = shiftsPage.map(this::mapToShiftResponse);
-                
-        return new ApiResponse<>(100, "All shifts retrieved", responsePage);
+    public ApiResponse<List<ShiftResponse>> getAllShifts() {
+        List<Shift> shifts = shiftService.getAllShifts();
+        List<ShiftResponse> responses = shifts.stream()
+                .map(this::mapToShiftResponse)
+                .collect(Collectors.toList());
+        return new ApiResponse<>(100, "All shifts retrieved", responses);
     }
 
     @GetMapping("/{id}")

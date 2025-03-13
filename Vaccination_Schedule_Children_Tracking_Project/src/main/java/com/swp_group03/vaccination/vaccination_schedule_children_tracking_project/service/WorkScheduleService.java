@@ -27,6 +27,7 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -77,8 +78,8 @@ public class WorkScheduleService {
             
             SchedulePattern savedPattern = patternRepository.save(pattern);
             
-            // Process each weekly schedule and apply it to all 4 weeks
-            logger.info("Processing weekly schedules and applying to all 4 weeks");
+            // Process each weekly schedule and apply it to all weeks
+            logger.info("Processing weekly schedules");
             for (WorkScheduleRequest.WeeklySchedule weeklySchedule : request.getWeeklySchedules()) {
                 for (WorkScheduleRequest.DailySchedule dailySchedule : weeklySchedule.getDailySchedules()) {
                     // Skip if no shift is assigned
@@ -89,7 +90,7 @@ public class WorkScheduleService {
                     logger.debug("Processing shift {} for day {}", dailySchedule.getShiftId(), dailySchedule.getDayOfWeek());
                     Shift shift = shiftService.getShiftById(Long.valueOf(dailySchedule.getShiftId()));
                     
-                    // Add to pattern for all 4 weeks
+                    // Add to pattern for all weeks
                     for (int weekNumber = 1; weekNumber <= 4; weekNumber++) {
                         patternService.addShiftToPattern(
                                 savedPattern.getId(),
@@ -101,28 +102,34 @@ public class WorkScheduleService {
                 }
             }
             
-            // If applying from this week, create actual schedules
+            LocalDate startOfWeek;
+            int numberOfWeeks;
+            
             if (Boolean.TRUE.equals(request.getApplyFromThisWeek())) {
+                // If applying from this week, start from current week and create 5 weeks total
                 logger.info("Applying schedule from this week");
-                LocalDate today = LocalDate.now();
-                LocalDate startOfWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-                
-                // Always use 4 weeks for the initial pattern
-                int numberOfWeeks = 4;
-                LocalDate endOfPeriod = startOfWeek.plusWeeks(numberOfWeeks);
-                
-                // Delete existing schedules for this employee in the date range
-                logger.info("Deleting existing schedules between {} and {}", startOfWeek, endOfPeriod);
-                List<WorkSchedule> existingSchedules = workScheduleRepository.findByEmployeeAndWorkDateBetween(
-                    employee, startOfWeek, endOfPeriod);
-                if (!existingSchedules.isEmpty()) {
-                    workScheduleRepository.deleteAll(existingSchedules);
-                }
-                
-                // Generate new schedules
-                logger.info("Generating new schedules for {} weeks", numberOfWeeks);
-                schedules.addAll(patternService.generateSchedulesFromPattern(savedPattern, startOfWeek, numberOfWeeks));
+                startOfWeek = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                numberOfWeeks = 5; // Current week + 4 future weeks
+            } else {
+                // If not applying from this week, start from next week and create 4 weeks
+                logger.info("Applying schedule from next week");
+                startOfWeek = LocalDate.now().with(TemporalAdjusters.next(DayOfWeek.MONDAY));
+                numberOfWeeks = 4; // Just 4 future weeks
             }
+            
+            LocalDate endOfPeriod = startOfWeek.plusWeeks(numberOfWeeks);
+            
+            // Delete existing schedules for this employee in the date range
+            logger.info("Deleting existing schedules between {} and {}", startOfWeek, endOfPeriod);
+            List<WorkSchedule> existingSchedules = workScheduleRepository.findByEmployeeAndWorkDateBetween(
+                employee, startOfWeek, endOfPeriod);
+            if (!existingSchedules.isEmpty()) {
+                workScheduleRepository.deleteAll(existingSchedules);
+            }
+            
+            // Generate new schedules
+            logger.info("Generating new schedules for {} weeks", numberOfWeeks);
+            schedules.addAll(patternService.generateSchedulesFromPattern(savedPattern, startOfWeek, numberOfWeeks));
             
             logger.info("Successfully created {} schedules", schedules.size());
             return schedules;
@@ -150,7 +157,20 @@ public class WorkScheduleService {
     }
     
     public List<Account> findEmployeesWithSameRoleAndShift(LocalDate date, Long shiftId, Set<Role> roles) {
-        return userRepo.findByRolesIn(roles);
+        // Get all schedules for the given date and shift
+        List<WorkSchedule> schedules = workScheduleRepository.findByWorkDateAndShiftId(date, shiftId);
+        
+        // Filter employees who have any matching role
+        return schedules.stream()
+            .map(WorkSchedule::getEmployee)
+            .filter(employee -> 
+                employee.getRoles().stream()
+                    .anyMatch(employeeRole -> 
+                        roles.stream()
+                            .anyMatch(role -> role.getRole_Name().equals(employeeRole.getRole_Name()))
+                    )
+            )
+            .collect(Collectors.toList());
     }
     
     public List<Account> getEmployeesByRole(String role_Name) {

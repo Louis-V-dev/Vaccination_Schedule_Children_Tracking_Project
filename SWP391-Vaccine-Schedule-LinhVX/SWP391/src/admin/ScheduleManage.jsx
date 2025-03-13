@@ -115,23 +115,20 @@ function ScheduleManage() {
 
     const fetchShifts = async () => {
         try {
-            const response = await axios.get('http://localhost:8080/api/admin/shifts', {
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                params: {
-                    page: 0,
-                    size: 100,
-                    sort: 'name,asc'
-                }
-            });
-            console.log('Shifts fetched:', response.data);
-            const shiftsData = response.data.result;
-            // Access the content array from the paginated response
-            setShifts(shiftsData.content.filter(shift => shift.status));
+            const response = await shiftService.getAllShifts();
+            console.log('Shifts fetched:', response);
+            
+            if (response?.result && Array.isArray(response.result)) {
+                // Don't filter by status - show all shifts
+                console.log('All shifts:', response.result);
+                setShifts(response.result || []);
+            } else {
+                console.error('Invalid shifts response structure:', response);
+                setShifts([]); // Set empty array as fallback
+            }
         } catch (error) {
-            toast.error('Failed to fetch shifts');
             console.error('Error in fetchShifts:', error);
+            setShifts([]); // Set empty array as fallback
         }
     };
 
@@ -282,7 +279,7 @@ function ScheduleManage() {
                 await shiftService.createShift(selectedShift);
                 toast.success('Shift created successfully');
             }
-            setShowShiftModal(false);
+            setSelectedShift(null); // Close modal by setting selectedShift to null
             fetchShifts();
         } catch (error) {
             console.error('Error saving shift:', error);
@@ -535,6 +532,7 @@ function ScheduleManage() {
                                             center: 'title',
                                             right: 'dayGridMonth,timeGridWeek,timeGridDay'
                                         }}
+                                        firstDay={1}  // Start week from Monday
                                         editable={false}
                                         selectable={true}
                                         selectMirror={true}
@@ -681,7 +679,7 @@ function ScheduleManage() {
                                                 disabled={!scheduleForm.employeeId}
                                             >
                                                 <option value="">No Shift</option>
-                                                {shifts.map(shift => (
+                                                {shifts.filter(shift => shift.status).map(shift => (
                                                     <option key={shift.id} value={shift.id}>
                                                         {shift.name} ({shift.startTime} - {shift.endTime})
                                                     </option>
@@ -738,7 +736,7 @@ function ScheduleManage() {
                                 </thead>
                                 <tbody>
                                     {shifts.map((shift, index) => (
-                                        <tr key={shift.id}>
+                                        <tr key={shift.id} className={!shift.status ? 'table-secondary' : ''}>
                                             <td>{index + 1}</td>
                                             <td>{shift.name}</td>
                                             <td>{shift.startTime}</td>
