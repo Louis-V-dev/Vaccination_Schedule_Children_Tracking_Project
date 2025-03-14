@@ -1,5 +1,7 @@
 package com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 /*import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -11,12 +13,13 @@ import jakarta.validation.constraints.Size;
 import org.hibernate.annotations.Nationalized;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "Accounts")
-
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Account {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -31,6 +34,7 @@ public class Account {
 //    @Size(min = 8, max = 20, message = "Mật khẩu phải có ít nhất 8 ký tự và nhiều nhất 20 ký tự !!")
 //    @Pattern(regexp = "^(?=.*[A-Z])(?=.*[\\W]).{8,20}$", message = "Mật Khẩu nên có ít nhất 1 ký tự đặc biệt và 1 chữ" +
 //            " in hoa !!")
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
 
     @Column(name = "first_name", length = 100)
@@ -87,6 +91,10 @@ public class Account {
 //    @ManyToOne(fetch = FetchType.LAZY)
 //    @JoinColumn(name = "Role_ID")
 //    private Account_Role role;lll
+
+    @OneToMany(mappedBy = "account_Id", cascade = CascadeType.ALL)
+    @JsonIgnoreProperties("account_Id")
+    private List<Child> children;
 
     public Account() {}
 

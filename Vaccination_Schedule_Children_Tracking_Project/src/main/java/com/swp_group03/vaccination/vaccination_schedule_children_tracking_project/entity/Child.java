@@ -1,5 +1,6 @@
 package com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 
@@ -9,6 +10,7 @@ import java.util.List;
 
 @Entity
 @Table(name = "Child")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Child{
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -33,6 +35,7 @@ public class Child{
     private boolean active = true;
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "Account_ID")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "children", "healthRecords", "vaccineRecords", "appointments", "password", "verificationCode", "verificationCodeExpiry"})
     private Account account_Id;
     
     // New fields
@@ -46,12 +49,15 @@ public class Child{
     private String medicalConditions;
     
     @OneToMany(mappedBy = "child")
+    @JsonIgnoreProperties({"child", "appointment", "doctor"})
     private List<HealthRecord> healthRecords = new ArrayList<>();
     
     @OneToMany(mappedBy = "child")
+    @JsonIgnoreProperties({"child"})
     private List<VaccineRecord> vaccineRecords = new ArrayList<>();
     
     @OneToMany(mappedBy = "child")
+    @JsonIgnoreProperties({"child", "guardian"})
     private List<Appointment> appointments = new ArrayList<>();
 
     public Child() {

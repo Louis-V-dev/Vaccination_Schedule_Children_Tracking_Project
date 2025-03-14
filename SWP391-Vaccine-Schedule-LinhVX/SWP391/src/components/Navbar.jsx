@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { Container, Nav, Navbar, NavDropdown } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faUser, faChild, faSignOutAlt, faCog } from '@fortawesome/free-solid-svg-icons';
+import { faUser, faChild, faSignOutAlt, faCog, faNotesMedical } from '@fortawesome/free-solid-svg-icons';
 import { toast } from 'react-toastify';
 import { jwtDecode } from 'jwt-decode';
 import '../css/NavBar.css';
@@ -56,6 +56,10 @@ const NavBar = () => {
 				<NavDropdown.Item as={Link} to="/children">
 					<FontAwesomeIcon icon={faChild} className="me-2" />
 					My Children
+				</NavDropdown.Item>
+				<NavDropdown.Item as={Link} to="/health-records">
+					<FontAwesomeIcon icon={faNotesMedical} className="me-2" />
+					Health Records
 				</NavDropdown.Item>
 				<NavDropdown.Item as={Link} to="/settings">
 					<FontAwesomeIcon icon={faCog} className="me-2" />

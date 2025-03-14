@@ -1,5 +1,6 @@
 package com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
@@ -14,6 +15,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE)
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class VaccineRecord {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -26,10 +28,12 @@ public class VaccineRecord {
     
     @ManyToOne
     @JoinColumn(name = "child_id", nullable = false)
+    @JsonIgnoreProperties({"vaccineRecords", "healthRecords", "appointments", "account_Id"})
     Child child;
     
     @ManyToOne
     @JoinColumn(name = "vaccine_id", nullable = false)
+    @JsonIgnoreProperties({"vaccineRecords"})
     Vaccine vaccine;
     
     @ManyToOne
@@ -74,8 +78,29 @@ public class VaccineRecord {
     @Column(name = "notes", length = 500)
     String notes;
     
+    @ManyToOne
+    @JoinColumn(name = "vaccination_plan_id")
+    @JsonIgnoreProperties({"vaccineRecords", "child", "parent"})
+    VaccinationPlan vaccinationPlan;
+    
+    @Column(name = "created_at")
+    LocalDateTime createdAt;
+    
+    @Column(name = "updated_at")
+    LocalDateTime updatedAt;
+    
     @PrePersist
     protected void onCreate() {
         administeredAt = LocalDateTime.now();
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
+        if (status == null) {
+            status = VaccineStatus.SCHEDULED;
+        }
+    }
+    
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
     }
 } 

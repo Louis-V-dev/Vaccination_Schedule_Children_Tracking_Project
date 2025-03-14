@@ -1,0 +1,36 @@
+.health-record-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.3s ease;
+}
+
+.health-record-card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.health-records-list {
+  margin-bottom: 2rem;
+}
+
+.vaccine-records-list .accordion-button:not(.collapsed) {
+  background-color: #e7f1ff;
+  color: #0d6efd;
+}
+
+.vaccine-records-list .accordion-item {
+  margin-bottom: 0.5rem;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .health-record-card .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .health-record-card .card-header > div:last-child {
+    margin-top: 8px;
+  }
+} 

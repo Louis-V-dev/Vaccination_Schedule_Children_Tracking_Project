@@ -35,8 +35,11 @@ public class ChildController {
     private UserService userService;
 
     @PostMapping("/create")
-    public ResponseEntity<Child> createChild(@Valid @RequestBody ChildrenRequest child) {
-        Child newChild = childService.createChildren(child);
+    public ResponseEntity<Child> createChild(@Valid @RequestBody ChildrenRequest child, Authentication authentication) {
+        // Get the authenticated user
+        Account parent = userService.getUserFromAuthentication(authentication);
+        // Create child with parent account
+        Child newChild = childService.createChildren(child, parent);
         return ResponseEntity.ok(newChild);
     }
 

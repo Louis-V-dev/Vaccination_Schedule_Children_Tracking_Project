@@ -1,5 +1,6 @@
 package com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
@@ -14,6 +15,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE)
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class HealthRecord {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -22,10 +24,12 @@ public class HealthRecord {
     
     @OneToOne
     @JoinColumn(name = "appointment_id", nullable = false)
+    @JsonIgnoreProperties({"healthRecord", "child", "guardian", "doctor"})
     Appointment appointment;
     
     @ManyToOne
     @JoinColumn(name = "child_id", nullable = false)
+    @JsonIgnoreProperties({"healthRecords", "vaccineRecords", "appointments", "account_Id"})
     Child child;
     
     @Column(name = "temperature")
@@ -64,6 +68,7 @@ public class HealthRecord {
     
     @ManyToOne
     @JoinColumn(name = "doctor_id", nullable = false)
+    @JsonIgnoreProperties({"healthRecords", "password", "roles", "verificationCode", "verificationCodeExpiry"})
     Account doctor;
     
     @Column(name = "recorded_at")

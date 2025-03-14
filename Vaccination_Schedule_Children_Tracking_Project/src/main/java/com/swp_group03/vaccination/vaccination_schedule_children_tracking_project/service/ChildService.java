@@ -41,6 +41,23 @@ public class ChildService {
         if (childrenRequest.getMedicalConditions() != null) child.setMedicalConditions(childrenRequest.getMedicalConditions());
         return childRepo.save(child);
     }
+    
+    public Child createChildren(ChildrenRequest childrenRequest, Account parent){
+        Child child = new Child();
+        child.setChild_name(childrenRequest.getChild_name());
+        child.setDob(childrenRequest.getDob());
+        child.setHeight(childrenRequest.getHeight());
+        child.setWeight(childrenRequest.getWeight());
+        child.setGender(childrenRequest.getGender());
+        child.setActive(true);
+        // Set the parent account
+        child.setAccount_Id(parent);
+        // Set new fields if provided in the request
+        if (childrenRequest.getBloodType() != null) child.setBloodType(childrenRequest.getBloodType());
+        if (childrenRequest.getAllergies() != null) child.setAllergies(childrenRequest.getAllergies());
+        if (childrenRequest.getMedicalConditions() != null) child.setMedicalConditions(childrenRequest.getMedicalConditions());
+        return childRepo.save(child);
+    }
 
     public Child updateChildren(ChildrenRequest childRequest, String id){
         Child child = childRepo.findById(id).orElseThrow(() -> new EntityNotFoundException("Child not found"));

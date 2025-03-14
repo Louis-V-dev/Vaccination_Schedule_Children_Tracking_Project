@@ -14,6 +14,9 @@ import ChildrenManagement from "./user/ChildrenManagement";
 import WorkScheduleView from "./employee/components/WorkScheduleView";
 import PaymentList from "./admin/payment/PaymentList";
 import PaymentManage from './admin/payment/PaymentManage';
+import HealthRecord from './pages/HealthRecord';
+import HealthRecordDetail from './pages/HealthRecordDetail';
+import AppointmentDetail from './pages/AppointmentDetail';
 
 
 // Create placeholder components for the routes we'll implement later
@@ -38,6 +41,9 @@ function App() {
 			<Route path={"/booking"} element={<BookingPage />} />
 			<Route path={"/vaccination-history"} element={<VaccinationHistoryPage />} />
 			<Route path={"/service-package"} element={<ServicePackagePage />} />
+			<Route path={"/health-records"} element={<HealthRecord />} />
+			<Route path={"/health-records/:id"} element={<HealthRecordDetail />} />
+			<Route path={"/appointments/:id"} element={<AppointmentDetail />} />
 
 			{/*Admin page*/}
 			<Route path={"/ManageAccount"} element={<AccountManage />} />

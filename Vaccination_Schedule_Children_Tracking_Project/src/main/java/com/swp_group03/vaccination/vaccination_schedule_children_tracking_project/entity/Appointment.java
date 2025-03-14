@@ -1,5 +1,6 @@
 package com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
@@ -16,6 +17,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE)
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Appointment {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -24,10 +26,12 @@ public class Appointment {
     
     @ManyToOne
     @JoinColumn(name = "child_id", nullable = false)
+    @JsonIgnoreProperties({"appointments", "healthRecords", "vaccineRecords", "account_Id"})
     Child child;
     
     @ManyToOne
     @JoinColumn(name = "guardian_id", nullable = false)
+    @JsonIgnoreProperties({"appointments", "children", "password", "roles", "verificationCode", "verificationCodeExpiry"})
     Account guardian;
     
     @ManyToOne
@@ -39,6 +43,7 @@ public class Appointment {
     
     @ManyToOne
     @JoinColumn(name = "selected_doctor_id")
+    @JsonIgnoreProperties({"appointments", "password", "roles", "verificationCode", "verificationCodeExpiry"})
     Account doctor;
     
     @ManyToOne
@@ -89,6 +94,7 @@ public class Appointment {
     LocalDateTime statusUpdatedAt;
     
     @OneToOne(mappedBy = "appointment")
+    @JsonIgnoreProperties({"appointment", "child", "doctor"})
     HealthRecord healthRecord;
     
     @OneToOne(mappedBy = "appointment")
@@ -102,6 +108,9 @@ public class Appointment {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
         statusUpdatedAt = LocalDateTime.now();
+        if (status == null) {
+            status = AppointmentStatus.BOOKED;
+        }
     }
     
     @PreUpdate
