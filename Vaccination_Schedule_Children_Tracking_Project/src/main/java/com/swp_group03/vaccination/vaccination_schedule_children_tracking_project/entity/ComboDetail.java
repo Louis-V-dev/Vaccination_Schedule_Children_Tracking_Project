@@ -26,6 +26,9 @@ public class ComboDetail implements Serializable {
     @JoinColumn(name = "vaccineid")
     private Vaccine vaccine;
 
+    @Column(name = "total_dose")
+    private Integer totalDose = 1;
+
     public ComboDetail() {
         this.id = new ComboDetailId();
     }

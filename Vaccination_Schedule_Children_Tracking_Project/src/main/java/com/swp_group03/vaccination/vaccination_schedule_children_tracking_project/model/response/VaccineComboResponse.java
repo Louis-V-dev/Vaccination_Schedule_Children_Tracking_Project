@@ -21,6 +21,7 @@ public class VaccineComboResponse {
         private Long vaccineId;
         private String vaccineName;
         private Double price;
+        private Integer totalDose;
     }
     
     @Data

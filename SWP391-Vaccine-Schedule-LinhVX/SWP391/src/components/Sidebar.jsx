@@ -21,6 +21,10 @@ function Sidebar() {
 				<i className="fas fa-calendar-alt"></i>
 				Manage Schedule
 			</NavLink>
+			<NavLink to="/ManagePayment" className={({isActive}) => isActive ? "active" : ""}>
+				<i className="fas fa-money-bill-wave"></i>
+				Payments
+			</NavLink>
 		</div>
 	);
 }

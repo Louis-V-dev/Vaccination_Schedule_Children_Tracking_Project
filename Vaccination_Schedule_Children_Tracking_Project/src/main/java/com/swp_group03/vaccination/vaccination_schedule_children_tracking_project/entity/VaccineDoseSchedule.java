@@ -61,6 +61,10 @@ public class VaccineDoseSchedule {
     @Column(name = "payment_reference")
     String paymentReference;
     
+    @ManyToOne
+    @JoinColumn(name = "vaccine_payment_id")
+    VaccinePayment vaccinePayment;
+    
     @Column(name = "notes", length = 500)
     String notes;
 } 

@@ -61,6 +61,22 @@ const vaccineComboService = {
                 formattedData.vaccineIds = [];
             }
             
+            // Make sure vaccineDoses is properly formatted
+            if (formattedData.vaccineDoses && typeof formattedData.vaccineDoses === 'object') {
+                // Convert any string keys to numbers if needed
+                const cleanDoses = {};
+                Object.keys(formattedData.vaccineDoses).forEach(key => {
+                    const numericKey = Number(key);
+                    if (!isNaN(numericKey)) {
+                        // Ensure doses are numbers and at least 1
+                        cleanDoses[numericKey] = Math.max(1, Number(formattedData.vaccineDoses[key]) || 1);
+                    }
+                });
+                formattedData.vaccineDoses = cleanDoses;
+            } else {
+                formattedData.vaccineDoses = {};
+            }
+            
             // Remove any backup fields that might confuse the backend
             delete formattedData.categoryIds;
             delete formattedData.vaccineIdString;
@@ -104,6 +120,22 @@ const vaccineComboService = {
                 );
             } else {
                 formattedData.vaccineIds = [];
+            }
+            
+            // Make sure vaccineDoses is properly formatted
+            if (formattedData.vaccineDoses && typeof formattedData.vaccineDoses === 'object') {
+                // Convert any string keys to numbers if needed
+                const cleanDoses = {};
+                Object.keys(formattedData.vaccineDoses).forEach(key => {
+                    const numericKey = Number(key);
+                    if (!isNaN(numericKey)) {
+                        // Ensure doses are numbers and at least 1
+                        cleanDoses[numericKey] = Math.max(1, Number(formattedData.vaccineDoses[key]) || 1);
+                    }
+                });
+                formattedData.vaccineDoses = cleanDoses;
+            } else {
+                formattedData.vaccineDoses = {};
             }
             
             // Remove any backup fields that might confuse the backend

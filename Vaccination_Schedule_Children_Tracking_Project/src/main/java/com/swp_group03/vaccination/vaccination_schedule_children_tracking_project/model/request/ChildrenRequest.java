@@ -22,5 +22,9 @@ public class ChildrenRequest {
     private String weight;
     @NotBlank(message = "Vui lòng chọn giới tính của trẻ")
     private String gender;
-
+    
+    // New fields
+    private String bloodType;
+    private String allergies;
+    private String medicalConditions;
 }

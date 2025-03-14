@@ -27,6 +27,7 @@ const AdminLayout = ({ children }) => {
                             <Nav.Link as={Link} to="/ManageCombo">Vaccine Combos</Nav.Link>
                             <Nav.Link as={Link} to="/ManageSchedule">Manage Schedules</Nav.Link>
                             <Nav.Link as={Link} to="/WorkSchedule">Work Schedule</Nav.Link>
+                            <Nav.Link as={Link} to="/ManagePayment">Payments</Nav.Link>
                         </Nav>
                         <Nav>
                             <Nav.Link onClick={handleLogout}>Logout</Nav.Link>

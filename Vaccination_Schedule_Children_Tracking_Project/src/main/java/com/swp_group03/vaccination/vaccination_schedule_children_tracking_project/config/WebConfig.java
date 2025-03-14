@@ -15,16 +15,6 @@ import java.io.File;
 public class WebConfig implements WebMvcConfigurer {
 
     @Override
-    public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/**")
-                .allowedOrigins("http://localhost:5173")
-                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
-                .allowedHeaders("*")
-                .allowCredentials(true)
-                .maxAge(3600);
-    }
-
-    @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         // Get the absolute path to the vaccine-images directory
         String projectDir = System.getProperty("user.dir");

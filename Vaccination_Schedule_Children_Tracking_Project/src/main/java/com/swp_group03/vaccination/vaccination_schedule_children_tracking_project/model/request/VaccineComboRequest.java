@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.util.List;
+import java.util.Map;
 
 @Data
 public class VaccineComboRequest {
@@ -31,7 +32,10 @@ public class VaccineComboRequest {
     // List of category IDs this combo belongs to
     private List<Integer> categories;
     
-    // List of vaccines in this combo
+    // List of vaccines in this combo (replaced with map of vaccine ID to total dose)
     @NotEmpty(message = "Vaccine details cannot be empty")
     private List<Long> vaccineIds;
+    
+    // Map of vaccine ID to total dose
+    private Map<Long, Integer> vaccineDoses;
 } 

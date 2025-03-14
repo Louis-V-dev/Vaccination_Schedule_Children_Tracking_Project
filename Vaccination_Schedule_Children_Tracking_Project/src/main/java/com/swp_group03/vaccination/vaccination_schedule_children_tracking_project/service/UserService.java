@@ -11,6 +11,7 @@ import com.swp_group03.vaccination.vaccination_schedule_children_tracking_projec
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.repository.UserRepo;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.repository.RoleRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -166,5 +167,20 @@ public class UserService {
         Random random = new Random();
         int code = 100000 + random.nextInt(900000); // generates a number between 100000 and 999999
         return String.valueOf(code);
+    }
+    
+    /**
+     * Get the user account from Authentication object
+     * @param authentication the Spring Security Authentication object
+     * @return the Account entity
+     */
+    public Account getUserFromAuthentication(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            throw new AppException(ErrorCode.UNAUTHENTICATED);
+        }
+        
+        String username = authentication.getName();
+        return userRepo.findByUsername(username)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
     }
 }

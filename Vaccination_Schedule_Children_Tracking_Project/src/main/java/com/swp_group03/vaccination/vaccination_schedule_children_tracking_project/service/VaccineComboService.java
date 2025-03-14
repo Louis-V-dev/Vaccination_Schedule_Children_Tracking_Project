@@ -49,6 +49,7 @@ public class VaccineComboService {
         System.out.println("Creating combo with request: " + request);
         System.out.println("Vaccine IDs: " + request.getVaccineIds());
         System.out.println("Categories: " + request.getCategories());
+        System.out.println("Vaccine Doses: " + request.getVaccineDoses());
 
         VaccineCombo combo = new VaccineCombo();
         combo.setComboName(request.getComboName());
@@ -75,6 +76,13 @@ public class VaccineComboService {
                 detail.setVaccine(vaccine);
                 detail.setVaccineCombo(savedCombo);
                 
+                // Set the total dose if provided in the request, otherwise default to 1
+                if (request.getVaccineDoses() != null && request.getVaccineDoses().containsKey(vaccineId)) {
+                    detail.setTotalDose(request.getVaccineDoses().get(vaccineId));
+                } else {
+                    detail.setTotalDose(1);
+                }
+                
                 // Explicitly set the ID values
                 ComboDetailId detailId = new ComboDetailId();
                 detailId.setComboId(savedCombo.getComboId());
@@ -83,7 +91,7 @@ public class VaccineComboService {
                 
                 // Add to the combo's collection
                 savedCombo.getVaccineDetails().add(detail);
-                System.out.println("Added vaccine: " + vaccine.getName());
+                System.out.println("Added vaccine: " + vaccine.getName() + " with total dose: " + detail.getTotalDose());
             }
         }
         
@@ -133,6 +141,7 @@ public class VaccineComboService {
         System.out.println("Updating combo with ID: " + id);
         System.out.println("Vaccine IDs: " + request.getVaccineIds());
         System.out.println("Categories: " + request.getCategories());
+        System.out.println("Vaccine Doses: " + request.getVaccineDoses());
 
         combo.setComboName(request.getComboName());
         combo.setDescription(request.getDescription());
@@ -161,6 +170,13 @@ public class VaccineComboService {
                 detail.setVaccine(vaccine);
                 detail.setVaccineCombo(savedCombo);
                 
+                // Set the total dose if provided in the request, otherwise default to 1
+                if (request.getVaccineDoses() != null && request.getVaccineDoses().containsKey(vaccineId)) {
+                    detail.setTotalDose(request.getVaccineDoses().get(vaccineId));
+                } else {
+                    detail.setTotalDose(1);
+                }
+                
                 // Explicitly set the ID values
                 ComboDetailId detailId = new ComboDetailId();
                 detailId.setComboId(savedCombo.getComboId());
@@ -169,7 +185,7 @@ public class VaccineComboService {
                 
                 // Add to the combo's collection
                 savedCombo.getVaccineDetails().add(detail);
-                System.out.println("Added vaccine: " + vaccine.getName());
+                System.out.println("Added vaccine: " + vaccine.getName() + " with total dose: " + detail.getTotalDose());
             }
         }
         
@@ -230,6 +246,7 @@ public class VaccineComboService {
             vaccineInfo.setVaccineId(detail.getVaccine().getId());
             vaccineInfo.setVaccineName(detail.getVaccine().getName());
             vaccineInfo.setPrice(detail.getVaccine().getPrice() != null ? detail.getVaccine().getPrice().doubleValue() : null);
+            vaccineInfo.setTotalDose(detail.getTotalDose() != null ? detail.getTotalDose() : 1);
             vaccineInfos.add(vaccineInfo);
         }
         response.setVaccines(vaccineInfos);

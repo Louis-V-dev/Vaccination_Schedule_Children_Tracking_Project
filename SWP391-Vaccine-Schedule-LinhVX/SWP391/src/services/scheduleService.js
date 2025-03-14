@@ -21,11 +21,16 @@ const getAuthHeaders = () => {
         const payload = JSON.parse(atob(tokenParts[1]));
         console.log('Token payload:', payload);
 
-        // Store user information
-        if (payload.sub) {
-            localStorage.setItem('userId', payload.sub);
-            console.log('Updated userId from token:', payload.sub);
+        // Ensure we have a valid user ID
+        if (!payload.sub) {
+            console.error('No user ID found in token payload');
+            return {};
         }
+
+        // Store user information
+        const userId = payload.sub;
+        console.log('Using user ID from token:', userId);
+        localStorage.setItem('userId', userId);
 
         if (payload.roles && Array.isArray(payload.roles)) {
             localStorage.setItem('roles', JSON.stringify(payload.roles));
@@ -34,7 +39,7 @@ const getAuthHeaders = () => {
 
         // Store complete user info
         const userInfo = {
-            id: payload.sub,
+            id: userId,
             roles: payload.roles || [],
             exp: payload.exp,
             email: payload.email
@@ -47,7 +52,10 @@ const getAuthHeaders = () => {
             'Content-Type': 'application/json'
         };
     } catch (e) {
-        console.error('Error validating token:', e);
+        console.error('Error processing token:', e);
+        // Clear potentially corrupted data
+        localStorage.removeItem('userId');
+        localStorage.removeItem('user');
         return {};
     }
 };
@@ -410,10 +418,17 @@ const scheduleService = {
             const userId = localStorage.getItem('userId');
             if (!userId) {
                 console.error('User ID not found in localStorage');
+                window.location.href = '/login';
                 return [];
             }
             
-            console.log('Making sent requests API call with userId:', userId);
+            // Log the actual request details
+            console.log('Making sent requests API call with:', {
+                url: `${API_URL}/employee/schedules/shift-change-requests/sent`,
+                headers: headers,
+                userId: userId
+            });
+            
             const response = await axios.get(`${API_URL}/employee/schedules/shift-change-requests/sent`, {
                 headers,
                 params: { employeeId: userId }
@@ -429,6 +444,13 @@ const scheduleService = {
             return response.data.result;
         } catch (error) {
             console.error('Error fetching sent requests:', error);
+            if (error.response?.status === 401) {
+                // Token expired or invalid
+                localStorage.removeItem('token');
+                localStorage.removeItem('userId');
+                window.location.href = '/login';
+                return [];
+            }
             console.error('Error details:', {
                 status: error.response?.status,
                 statusText: error.response?.statusText,
@@ -455,10 +477,17 @@ const scheduleService = {
             const userId = localStorage.getItem('userId');
             if (!userId) {
                 console.error('User ID not found in localStorage');
+                window.location.href = '/login';
                 return [];
             }
             
-            console.log('Making received requests API call with userId:', userId);
+            // Log the actual request details
+            console.log('Making received requests API call with:', {
+                url: `${API_URL}/employee/schedules/shift-change-requests/received`,
+                headers: headers,
+                userId: userId
+            });
+            
             const response = await axios.get(`${API_URL}/employee/schedules/shift-change-requests/received`, {
                 headers,
                 params: { employeeId: userId }
@@ -474,6 +503,13 @@ const scheduleService = {
             return response.data.result;
         } catch (error) {
             console.error('Error fetching received requests:', error);
+            if (error.response?.status === 401) {
+                // Token expired or invalid
+                localStorage.removeItem('token');
+                localStorage.removeItem('userId');
+                window.location.href = '/login';
+                return [];
+            }
             console.error('Error details:', {
                 status: error.response?.status,
                 statusText: error.response?.statusText,

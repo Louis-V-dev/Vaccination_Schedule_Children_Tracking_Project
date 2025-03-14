@@ -12,6 +12,9 @@ import ScheduleManage from "./admin/ScheduleManage";
 import ProfilePage from "./user/ProfilePage";
 import ChildrenManagement from "./user/ChildrenManagement";
 import WorkScheduleView from "./employee/components/WorkScheduleView";
+import PaymentList from "./admin/payment/PaymentList";
+import PaymentManage from './admin/payment/PaymentManage';
+
 
 // Create placeholder components for the routes we'll implement later
 const BookingPage = () => <div>Booking Schedule page will be implemented soon.</div>;
@@ -43,6 +46,7 @@ function App() {
 			<Route path={"/ManageSchedule"} element={<ScheduleManage />} />
 			<Route path={"/WorkSchedule"} element={<WorkScheduleView />} />
 			<Route path={"/shift-requests"} element={<WorkScheduleView activeTab="requests" />} />
+			<Route path={"/ManagePayment"} element={<PaymentManage />} />
 		</Routes>
 	);
 }

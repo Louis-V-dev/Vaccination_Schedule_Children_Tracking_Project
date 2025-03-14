@@ -259,15 +259,47 @@ public class ShiftChangeRequestService {
     }
 
     public List<ShiftChangeRequest> getSentShiftChangeRequests(String employeeId) {
-        Account employee = userRepo.findById(employeeId)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
-        return shiftChangeRequestRepository.findByRequester(employee);
+        System.out.println("Attempting to find user with ID: " + employeeId);
+        // First check if ID is valid
+        if (employeeId == null || employeeId.trim().isEmpty()) {
+            System.out.println("Employee ID is null or empty");
+            throw new AppException(ErrorCode.INVALID_REQUEST);
+        }
+        
+        try {
+            Account employee = userRepo.findById(employeeId)
+                    .orElseThrow(() -> {
+                        System.out.println("User not found with ID: " + employeeId);
+                        return new AppException(ErrorCode.USER_NOT_FOUND);
+                    });
+            System.out.println("Found user: " + employee.getUsername() + " with ID: " + employee.getAccountId());
+            return shiftChangeRequestRepository.findByRequester(employee);
+        } catch (Exception e) {
+            System.out.println("Error finding user: " + e.getMessage());
+            throw e;
+        }
     }
 
     public List<ShiftChangeRequest> getReceivedShiftChangeRequests(String employeeId) {
-        Account employee = userRepo.findById(employeeId)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
-        return shiftChangeRequestRepository.findByTarget(employee);
+        System.out.println("Attempting to find user with ID: " + employeeId);
+        // First check if ID is valid
+        if (employeeId == null || employeeId.trim().isEmpty()) {
+            System.out.println("Employee ID is null or empty");
+            throw new AppException(ErrorCode.INVALID_REQUEST);
+        }
+        
+        try {
+            Account employee = userRepo.findById(employeeId)
+                    .orElseThrow(() -> {
+                        System.out.println("User not found with ID: " + employeeId);
+                        return new AppException(ErrorCode.USER_NOT_FOUND);
+                    });
+            System.out.println("Found user: " + employee.getUsername() + " with ID: " + employee.getAccountId());
+            return shiftChangeRequestRepository.findByTarget(employee);
+        } catch (Exception e) {
+            System.out.println("Error finding user: " + e.getMessage());
+            throw e;
+        }
     }
 
     public ShiftChangeRequest approveShiftChangeRequest(String requestId) {

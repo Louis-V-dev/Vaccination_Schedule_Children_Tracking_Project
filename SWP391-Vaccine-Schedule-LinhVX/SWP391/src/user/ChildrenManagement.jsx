@@ -1,65 +1,164 @@
-import React, { useState } from 'react';
-import { Container, Row, Col, Card, Form, Button, Alert, Spinner } from 'react-bootstrap';
+import React, { useState, useEffect } from 'react';
+import { Container, Row, Col, Card, Form, Button, Alert, Spinner, Badge } from 'react-bootstrap';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faEdit, faCheck, faTimes, faPlus } from '@fortawesome/free-solid-svg-icons';
+import { faEdit, faCheck, faTimes, faPlus, faEye } from '@fortawesome/free-solid-svg-icons';
 import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom';
 import UserLayout from './UserLayout';
+import ChildService from '../services/ChildService';
 import '../css/ProfilePage.css';
 
+const bloodTypes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+
 const ChildrenManagement = () => {
-    const [children, setChildren] = useState([
-        {
-            id: 1,
-            name: 'Child 1',
-            age: '1 month',
-            firstName: 'John',
-            lastName: 'Doe',
-            gender: 'Male',
-            birthday: '2023-12-15',
-            weight: '5 kg'
-        }
-    ]);
-    
-    const [childForm, setChildForm] = useState({
-        firstName: '',
-        lastName: '',
-        birthday: '',
-        weight: '',
-        gender: 'Male'
-    });
-    
+    const [children, setChildren] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
     const [showChildForm, setShowChildForm] = useState(false);
     const [editingChildId, setEditingChildId] = useState(null);
-    const [loading, setLoading] = useState(false);
+    
+    const [childForm, setChildForm] = useState({
+        child_name: '',
+        dob: '',
+        height: '',
+        weight: '',
+        gender: 'Male',
+        bloodType: '',
+        allergies: '',
+        medicalConditions: ''
+    });
+    
+    const navigate = useNavigate();
+    
+    // Fetch all children
+    const fetchChildren = async () => {
+        setLoading(true);
+        setError(null);
+        
+        try {
+            // Check for authentication token
+            const token = localStorage.getItem('token');
+            if (!token) {
+                setError('Please log in to view children');
+                toast.error('Please log in to view children');
+                navigate('/login');
+                return;
+            }
+
+            // Determine if user is guardian or staff/admin
+            const userRole = localStorage.getItem('userRole');
+            const isGuardian = userRole === 'GUARDIAN';
+            
+            let response;
+            if (isGuardian) {
+                response = await ChildService.getChildrenForGuardian();
+            } else {
+                response = await ChildService.getAllChildren();
+            }
+            
+            // Ensure we have an array of children
+            const childrenData = response.data || [];
+            if (!Array.isArray(childrenData)) {
+                console.error('Invalid children data format:', childrenData);
+                setError('Invalid data format received from server');
+                setChildren([]);
+                return;
+            }
+            
+            setChildren(childrenData);
+        } catch (err) {
+            console.error('Error fetching children:', err);
+            
+            // Handle different types of errors
+            if (err.response) {
+                if (err.response.status === 401) {
+                    // Unauthorized - token expired or invalid
+                    localStorage.removeItem('token');
+                    toast.error('Session expired. Please log in again.');
+                    navigate('/login');
+                    return;
+                } else if (err.response.status === 403) {
+                    // Forbidden - user doesn't have permission
+                    toast.error('You do not have permission to view children');
+                } else if (err.response.status === 400) {
+                    // Bad request - likely missing or invalid parameters
+                    toast.error('Invalid request. Please try again.');
+                }
+            }
+            
+            const message = err.response?.data?.message || err.message || 'Failed to fetch children';
+            setError(message);
+            toast.error(message);
+            setChildren([]); // Ensure children is always an array
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    // Load children when component mounts
+    useEffect(() => {
+        fetchChildren();
+    }, []);
     
     const handleAddChild = () => {
         setChildForm({
-            firstName: '',
-            lastName: '',
-            birthday: '',
+            child_name: '',
+            dob: '',
+            height: '',
             weight: '',
-            gender: 'Male'
+            gender: 'Male',
+            bloodType: '',
+            allergies: '',
+            medicalConditions: ''
         });
         setShowChildForm(true);
         setEditingChildId(null);
     };
     
-    const handleEditChild = (child) => {
+    const handleEditChild = async (childId) => {
+        setLoading(true);
+        try {
+            const response = await ChildService.getChildById(childId);
+            const child = response.data;
+            
         setChildForm({
-            firstName: child.firstName,
-            lastName: child.lastName,
-            birthday: child.birthday,
-            weight: child.weight,
-            gender: child.gender
-        });
+                child_name: child.child_name || '',
+                dob: child.dob ? new Date(child.dob).toISOString().split('T')[0] : '',
+                height: child.height || '',
+                weight: child.weight || '',
+                gender: child.gender || 'Male',
+                bloodType: child.bloodType || '',
+                allergies: child.allergies || '',
+                medicalConditions: child.medicalConditions || ''
+            });
+            
         setShowChildForm(true);
-        setEditingChildId(child.id);
+            setEditingChildId(childId);
+        } catch (err) {
+            const message = err.response?.data?.message || err.message || 'Failed to load child data';
+            toast.error(message);
+        } finally {
+            setLoading(false);
+        }
     };
     
-    const handleDeleteChild = (childId) => {
+    const handleViewChild = (childId) => {
+        navigate(`/children/${childId}`);
+    };
+    
+    const handleDeleteChild = async (childId) => {
         if (window.confirm('Are you sure you want to delete this child?')) {
-            setChildren(children.filter(child => child.id !== childId));
+            setLoading(true);
+            try {
+                await ChildService.deleteChild(childId);
+                setChildren(children.filter(child => child.child_id !== childId));
             toast.success('Child deleted successfully');
+            } catch (err) {
+                const message = err.response?.data?.message || err.message || 'Failed to delete child';
+                toast.error(message);
+            } finally {
+                setLoading(false);
+            }
         }
     };
     
@@ -72,6 +171,8 @@ const ChildrenManagement = () => {
     };
     
     const calculateAge = (birthdate) => {
+        if (!birthdate) return 'Unknown';
+        
         const birth = new Date(birthdate);
         const now = new Date();
         const months = (now.getFullYear() - birth.getFullYear()) * 12 + now.getMonth() - birth.getMonth();
@@ -85,56 +186,58 @@ const ChildrenManagement = () => {
         }
     };
     
-    const handleSaveChild = () => {
-        if (!childForm.firstName || !childForm.lastName || !childForm.birthday) {
+    const handleSaveChild = async () => {
+        // Form validation
+        if (!childForm.child_name || !childForm.dob || !childForm.height || !childForm.weight || !childForm.gender) {
             toast.error('Please fill in all required fields');
             return;
         }
         
-        // Get first letter of first name for the avatar
-        const firstLetter = childForm.firstName.charAt(0).toUpperCase();
+        // Format data for API
+        const childData = {
+            ...childForm,
+            dob: new Date(childForm.dob + 'T00:00:00').toISOString()
+        };
         
-        // Calculate age based on birthday
-        const age = calculateAge(childForm.birthday);
+        setLoading(true);
+        try {
+            let response;
         
         if (editingChildId) {
             // Update existing child
-            setChildren(children.map(child => {
-                if (child.id === editingChildId) {
-                    return {
-                        ...child,
-                        name: `${childForm.firstName} ${childForm.lastName}`,
-                        age,
-                        ...childForm
-                    };
-                }
-                return child;
-            }));
+                response = await ChildService.updateChild(editingChildId, childData);
+                setChildren(children.map(child => 
+                    child.child_id === editingChildId ? response.data : child
+                ));
             toast.success('Child updated successfully');
         } else {
             // Add new child
-            const newId = Math.max(...children.map(c => c.id), 0) + 1;
-            setChildren([
-                ...children,
-                {
-                    id: newId,
-                    name: `${childForm.firstName} ${childForm.lastName}`,
-                    age,
-                    ...childForm,
-                    firstLetter
-                }
-            ]);
+                response = await ChildService.createChild(childData);
+                setChildren([...children, response.data]);
             toast.success('Child added successfully');
         }
         
         setShowChildForm(false);
+        } catch (err) {
+            const message = err.response?.data?.message || err.message || 'Failed to save child';
+            toast.error(message);
+        } finally {
+            setLoading(false);
+        }
     };
     
     const handleCancelChildForm = () => {
         setShowChildForm(false);
     };
 
-    if (loading) {
+    const formatDate = (dateString) => {
+        if (!dateString) return 'Not specified';
+        const date = new Date(dateString);
+        return date.toLocaleDateString();
+    };
+    
+    // If page is loading
+    if (loading && !showChildForm) {
         return (
             <UserLayout>
                 <Container className="d-flex justify-content-center align-items-center min-vh-100">
@@ -158,6 +261,8 @@ const ChildrenManagement = () => {
                                 </Button>
                             </div>
                             
+                            {error && <Alert variant="danger">{error}</Alert>}
+                            
                             {children.length === 0 ? (
                                 <Card className="text-center p-5">
                                     <Card.Body>
@@ -167,23 +272,35 @@ const ChildrenManagement = () => {
                                 </Card>
                             ) : (
                                 children.map(child => (
-                                    <Card key={child.id} className="child-card mb-3">
+                                    <Card key={child.child_id} className="child-card mb-3">
                                         <Card.Body>
                                             <div className="d-flex align-items-center">
                                                 <div className="child-avatar">
-                                                    {child.firstLetter || child.name.charAt(0)}
+                                                    {child.child_name.charAt(0).toUpperCase()}
                                                 </div>
                                                 <div className="child-info ms-3">
-                                                    <h5 className="mb-1">{child.name}</h5>
-                                                    <p className="mb-0 text-muted">Age: {child.age}</p>
-                                                    <p className="mb-0 text-muted">Birthday: {child.birthday}</p>
-                                                    <p className="mb-0 text-muted">Weight: {child.weight}</p>
+                                                    <h5 className="mb-1">{child.child_name}</h5>
+                                                    <p className="mb-0 text-muted">Age: {calculateAge(child.dob)}</p>
+                                                    <p className="mb-0 text-muted">Birthday: {formatDate(child.dob)}</p>
+                                                    <p className="mb-0 text-muted">
+                                                        <span>Height: {child.height}</span>
+                                                        <span className="ms-3">Weight: {child.weight}</span>
+                                                        <span className="ms-3">Gender: {child.gender}</span>
+                                                    </p>
+                                                    {child.bloodType && (
+                                                        <Badge bg="primary" className="me-2 mt-2">
+                                                            Blood Type: {child.bloodType}
+                                                        </Badge>
+                                                    )}
                                                 </div>
                                                 <div className="ms-auto">
-                                                    <Button variant="outline-success" size="sm" className="me-2" onClick={() => handleEditChild(child)}>
+                                                    <Button variant="outline-primary" size="sm" className="me-2" onClick={() => handleViewChild(child.child_id)}>
+                                                        <FontAwesomeIcon icon={faEye} />
+                                                    </Button>
+                                                    <Button variant="outline-success" size="sm" className="me-2" onClick={() => handleEditChild(child.child_id)}>
                                                         <FontAwesomeIcon icon={faEdit} />
                                                     </Button>
-                                                    <Button variant="outline-danger" size="sm" onClick={() => handleDeleteChild(child.id)}>
+                                                    <Button variant="outline-danger" size="sm" onClick={() => handleDeleteChild(child.child_id)}>
                                                         <FontAwesomeIcon icon={faTimes} />
                                                     </Button>
                                                 </div>
@@ -199,36 +316,42 @@ const ChildrenManagement = () => {
                                 <h5 className="mb-0">{editingChildId ? 'Edit Child' : 'Add Child'}</h5>
                             </Card.Header>
                             <Card.Body>
-                                <Form>
+                                {loading && (
+                                    <div className="text-center my-3">
+                                        <Spinner animation="border" variant="success" />
+                                    </div>
+                                )}
+                                
+                                <Form onSubmit={(e) => { e.preventDefault(); handleSaveChild(); }}>
+                                    <Form.Group className="mb-3">
+                                        <Form.Label>Child's full name: <span className="text-danger">*</span></Form.Label>
+                                        <Form.Control 
+                                            type="text" 
+                                            name="child_name" 
+                                            value={childForm.child_name}
+                                            onChange={handleChildFormChange}
+                                            required
+                                            disabled={loading}
+                                        />
+                                    </Form.Group>
+                                    
                                     <Row>
                                         <Col md={6}>
                                             <Form.Group className="mb-3">
-                                                <Form.Label>First name:</Form.Label>
+                                                <Form.Label>Date of Birth: <span className="text-danger">*</span></Form.Label>
                                                 <Form.Control 
-                                                    type="text" 
-                                                    name="firstName" 
-                                                    value={childForm.firstName}
+                                                    type="date" 
+                                                    name="dob" 
+                                                    value={childForm.dob}
                                                     onChange={handleChildFormChange}
                                                     required
+                                                    disabled={loading}
                                                 />
                                             </Form.Group>
                                         </Col>
                                         <Col md={6}>
                                             <Form.Group className="mb-3">
-                                                <Form.Label>Last name:</Form.Label>
-                                                <Form.Control 
-                                                    type="text" 
-                                                    name="lastName" 
-                                                    value={childForm.lastName}
-                                                    onChange={handleChildFormChange}
-                                                    required
-                                                />
-                                            </Form.Group>
-                                        </Col>
-                                    </Row>
-                                    
-                                    <Form.Group className="mb-3">
-                                        <Form.Label>Gender:</Form.Label>
+                                                <Form.Label>Gender: <span className="text-danger">*</span></Form.Label>
                                         <div>
                                             <Form.Check
                                                 inline
@@ -239,6 +362,7 @@ const ChildrenManagement = () => {
                                                 checked={childForm.gender === 'Male'}
                                                 onChange={handleChildFormChange}
                                                 id="gender-male"
+                                                        disabled={loading}
                                             />
                                             <Form.Check
                                                 inline
@@ -249,38 +373,107 @@ const ChildrenManagement = () => {
                                                 checked={childForm.gender === 'Female'}
                                                 onChange={handleChildFormChange}
                                                 id="gender-female"
+                                                        disabled={loading}
                                             />
                                         </div>
+                                            </Form.Group>
+                                        </Col>
+                                    </Row>
+                                    
+                                    <Row>
+                                        <Col md={6}>
+                                            <Form.Group className="mb-3">
+                                                <Form.Label>Height (cm): <span className="text-danger">*</span></Form.Label>
+                                                <Form.Control 
+                                                    type="text" 
+                                                    name="height" 
+                                                    value={childForm.height}
+                                                    onChange={handleChildFormChange}
+                                                    placeholder="e.g., 50"
+                                                    required
+                                                    disabled={loading}
+                                                />
+                                            </Form.Group>
+                                        </Col>
+                                        <Col md={6}>
+                                            <Form.Group className="mb-3">
+                                                <Form.Label>Weight (kg): <span className="text-danger">*</span></Form.Label>
+                                                <Form.Control 
+                                                    type="text" 
+                                                    name="weight" 
+                                                    value={childForm.weight}
+                                                    onChange={handleChildFormChange}
+                                                    placeholder="e.g., 5"
+                                                    required
+                                                    disabled={loading}
+                                                />
+                                            </Form.Group>
+                                        </Col>
+                                    </Row>
+                                    
+                                    <Form.Group className="mb-3">
+                                        <Form.Label>Blood Type:</Form.Label>
+                                        <Form.Select
+                                            name="bloodType"
+                                            value={childForm.bloodType}
+                                            onChange={handleChildFormChange}
+                                            disabled={loading}
+                                        >
+                                            <option value="">Select blood type</option>
+                                            {bloodTypes.map(type => (
+                                                <option key={type} value={type}>{type}</option>
+                                            ))}
+                                        </Form.Select>
                                     </Form.Group>
                                     
                                     <Form.Group className="mb-3">
-                                        <Form.Label>Birthday:</Form.Label>
+                                        <Form.Label>Allergies:</Form.Label>
                                         <Form.Control 
-                                            type="date" 
-                                            name="birthday" 
-                                            value={childForm.birthday}
+                                            as="textarea" 
+                                            rows={2}
+                                            name="allergies" 
+                                            value={childForm.allergies}
                                             onChange={handleChildFormChange}
-                                            required
+                                            placeholder="List any allergies, separated by commas"
+                                            disabled={loading}
                                         />
                                     </Form.Group>
                                     
                                     <Form.Group className="mb-3">
-                                        <Form.Label>Weight:</Form.Label>
+                                        <Form.Label>Medical Conditions:</Form.Label>
                                         <Form.Control 
-                                            type="text" 
-                                            name="weight" 
-                                            value={childForm.weight}
+                                            as="textarea" 
+                                            rows={2}
+                                            name="medicalConditions" 
+                                            value={childForm.medicalConditions}
                                             onChange={handleChildFormChange}
-                                            placeholder="e.g., 5 kg"
+                                            placeholder="List any medical conditions, separated by commas"
+                                            disabled={loading}
                                         />
                                     </Form.Group>
                                     
                                     <div className="d-flex justify-content-end">
-                                        <Button variant="secondary" className="me-2" onClick={handleCancelChildForm}>
+                                        <Button 
+                                            variant="secondary" 
+                                            className="me-2" 
+                                            onClick={handleCancelChildForm}
+                                            disabled={loading}
+                                        >
                                             Cancel
                                         </Button>
-                                        <Button variant="success" onClick={handleSaveChild}>
-                                            {editingChildId ? 'Update' : 'Add'}
+                                        <Button 
+                                            type="submit"
+                                            variant="success"
+                                            disabled={loading}
+                                        >
+                                            {loading ? (
+                                                <>
+                                                    <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
+                                                    {editingChildId ? 'Updating...' : 'Adding...'}
+                                                </>
+                                            ) : (
+                                                editingChildId ? 'Update' : 'Add'
+                                            )}
                                         </Button>
                                     </div>
                                 </Form>
