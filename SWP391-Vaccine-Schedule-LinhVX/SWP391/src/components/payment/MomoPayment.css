@@ -1,0 +1,152 @@
+.momo-qr-container {
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    max-width: 300px;
+    margin: 0 auto;
+}
+
+.momo-qr-container:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.momo-qr-code {
+    max-width: 100%;
+    height: auto;
+    padding: 10px;
+}
+
+.modal-title .fa-qrcode {
+    color: #d82d8b !important; /* MoMo pink color */
+}
+
+/* MoMo brand styling */
+.btn-danger {
+    background-color: #d82d8b;
+    border-color: #c42880;
+}
+
+.btn-danger:hover, .btn-danger:focus {
+    background-color: #c42880;
+    border-color: #b02676;
+}
+
+/* Animation for status checking */
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+.checking-status {
+    animation: pulse 1.5s infinite;
+}
+
+/* QR code iframe container styling */
+.qr-frame-container {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Make iframe more responsive */
+.qr-frame-container iframe {
+    width: 100%;
+    border: none;
+    transform-origin: top center;
+    transition: transform 0.3s ease;
+}
+
+/* Style for mobile devices */
+@media (max-width: 576px) {
+    .qr-frame-container {
+        height: 180px !important;
+    }
+    
+    .qr-frame-container iframe {
+        transform: scale(0.4) !important;
+    }
+}
+
+/* Add loading indicator for iframe */
+.iframe-loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(255, 255, 255, 0.8);
+    z-index: 1;
+}
+
+/* Style for the MoMo payment button */
+.momo-pay-button {
+    background-color: #ae2070;
+    border-color: #ae2070;
+}
+
+.momo-pay-button:hover, .momo-pay-button:active, .momo-pay-button:focus {
+    background-color: #8e1a5c !important;
+    border-color: #8e1a5c !important;
+}
+
+.payment-method-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 15px;
+}
+
+.payment-method-option {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 12px;
+    width: calc(50% - 10px);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.payment-method-option:hover {
+    border-color: #ae2070;
+    background-color: #f9f9f9;
+}
+
+.payment-method-option.selected {
+    border-color: #ae2070;
+    background-color: #fdf5f9;
+    box-shadow: 0 0 5px rgba(174, 32, 112, 0.3);
+}
+
+.payment-method-option .icon-container {
+    font-size: 24px;
+    margin-bottom: 8px;
+    color: #ae2070;
+}
+
+.payment-method-option .method-name {
+    font-size: 14px;
+    text-align: center;
+    font-weight: 500;
+}
+
+@media (max-width: 576px) {
+    .payment-method-option {
+        width: 100%;
+    }
+} 

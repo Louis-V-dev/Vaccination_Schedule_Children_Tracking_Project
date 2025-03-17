@@ -1,10 +1,7 @@
 package com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.controller;
 
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.Account;
-import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.Appointment;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.Child;
-import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.HealthRecord;
-import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.VaccineRecord;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.model.request.ChildrenRequest;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.service.ChildService;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.service.UserService;
@@ -15,7 +12,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
@@ -116,21 +112,7 @@ public class ChildController {
         return ResponseEntity.ok(childService.getChildrenByAgeRange(fromDate, toDate));
     }
     
-    @GetMapping("/{id}/health-records")
-    public ResponseEntity<List<HealthRecord>> getChildHealthRecords(@PathVariable String id) {
-        return ResponseEntity.ok(childService.getChildHealthRecords(id));
-    }
-    
-    @GetMapping("/{id}/vaccine-records")
-    public ResponseEntity<List<VaccineRecord>> getChildVaccineRecords(@PathVariable String id) {
-        return ResponseEntity.ok(childService.getChildVaccineRecords(id));
-    }
-    
-    @GetMapping("/{id}/appointments")
-    public ResponseEntity<List<Appointment>> getChildAppointments(@PathVariable String id) {
-        return ResponseEntity.ok(childService.getChildAppointments(id));
-    }
-    
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deactivateChild(@PathVariable String id) {
         childService.deactivateChild(id);

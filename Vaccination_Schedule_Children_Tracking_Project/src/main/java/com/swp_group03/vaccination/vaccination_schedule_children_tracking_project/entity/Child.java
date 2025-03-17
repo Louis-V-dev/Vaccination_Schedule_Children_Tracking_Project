@@ -48,17 +48,6 @@ public class Child{
     @Column(name = "medical_conditions", length = 500)
     private String medicalConditions;
     
-    @OneToMany(mappedBy = "child")
-    @JsonIgnoreProperties({"child", "appointment", "doctor"})
-    private List<HealthRecord> healthRecords = new ArrayList<>();
-    
-    @OneToMany(mappedBy = "child")
-    @JsonIgnoreProperties({"child"})
-    private List<VaccineRecord> vaccineRecords = new ArrayList<>();
-    
-    @OneToMany(mappedBy = "child")
-    @JsonIgnoreProperties({"child", "guardian"})
-    private List<Appointment> appointments = new ArrayList<>();
 
     public Child() {
     }
@@ -150,30 +139,6 @@ public class Child{
 
     public void setMedicalConditions(String medicalConditions) {
         this.medicalConditions = medicalConditions;
-    }
-
-    public List<HealthRecord> getHealthRecords() {
-        return healthRecords;
-    }
-
-    public void setHealthRecords(List<HealthRecord> healthRecords) {
-        this.healthRecords = healthRecords;
-    }
-
-    public List<VaccineRecord> getVaccineRecords() {
-        return vaccineRecords;
-    }
-
-    public void setVaccineRecords(List<VaccineRecord> vaccineRecords) {
-        this.vaccineRecords = vaccineRecords;
-    }
-
-    public List<Appointment> getAppointments() {
-        return appointments;
-    }
-
-    public void setAppointments(List<Appointment> appointments) {
-        this.appointments = appointments;
     }
 
     public boolean isActive() {

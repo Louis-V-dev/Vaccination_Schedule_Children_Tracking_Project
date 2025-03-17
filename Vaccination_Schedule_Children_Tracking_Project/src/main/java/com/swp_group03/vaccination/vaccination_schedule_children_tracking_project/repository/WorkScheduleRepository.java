@@ -9,9 +9,10 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
-public interface WorkScheduleRepository extends JpaRepository<WorkSchedule, String> {
+public interface WorkScheduleRepository extends JpaRepository<WorkSchedule, Long> {
     List<WorkSchedule> findByWorkDateBetween(LocalDate startDate, LocalDate endDate);
     
     List<WorkSchedule> findByEmployeeAccountIdAndWorkDateBetween(String employeeId, LocalDate startDate, LocalDate endDate);
@@ -23,6 +24,8 @@ public interface WorkScheduleRepository extends JpaRepository<WorkSchedule, Stri
     List<WorkSchedule> findByEmployee(Account employee);
     
     List<WorkSchedule> findByEmployeeAndWorkDateBetween(Account employee, LocalDate startDate, LocalDate endDate);
+    
+    Optional<WorkSchedule> findByEmployeeAndWorkDate(Account employee, LocalDate workDate);
     
     @Query("SELECT ws FROM WorkSchedule ws WHERE ws.sourcePattern IS NOT NULL AND ws.weekNumber = ?1")
     List<WorkSchedule> findPatternsByWeekNumber(Integer weekNumber);
@@ -37,8 +40,14 @@ public interface WorkScheduleRepository extends JpaRepository<WorkSchedule, Stri
     @Query("SELECT ws FROM WorkSchedule ws WHERE ws.workDate = ?1 AND ws.shift.id = ?2 AND ws.employee.accountId <> ?3")
     List<WorkSchedule> findPotentialShiftSwaps(LocalDate workDate, Long shiftId, String excludeEmployeeId);
     
-    // New methods for pattern management
+    // Pattern management methods
     List<WorkSchedule> findBySourcePattern(SchedulePattern pattern);
     
     List<WorkSchedule> findBySourcePatternAndWorkDateGreaterThanEqual(SchedulePattern pattern, LocalDate date);
+
+    // Appointment scheduling methods
+    List<WorkSchedule> findByWorkDate(LocalDate workDate);
+    
+    @Query("SELECT ws FROM WorkSchedule ws WHERE ws.employee.accountId = ?1 AND ws.workDate = ?2")
+    Optional<WorkSchedule> findByEmployeeIdAndWorkDate(String employeeId, LocalDate workDate);
 } 

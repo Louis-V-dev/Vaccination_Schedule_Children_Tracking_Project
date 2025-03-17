@@ -4,7 +4,7 @@ import com.swp_group03.vaccination.vaccination_schedule_children_tracking_projec
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.VacineCategory;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.model.request.Vaccine.VaccineRequest;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.model.response.VaccineDTO;
-import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.repository.VaccineRepo;
+import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.repository.VaccineRepository;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.repository.VacineCategoryRepo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 public class VaccineService {
 
     @Autowired
-    private VaccineRepo vaccineRepo;
+    private VaccineRepository vaccineRepository;
 
     @Autowired
     private VacineCategoryRepo vacineCategoryRepo;
@@ -76,7 +76,7 @@ public class VaccineService {
             System.out.println("No image file provided or empty file");
         }
 
-        Vaccine savedVaccine = vaccineRepo.save(vaccine);
+        Vaccine savedVaccine = vaccineRepository.save(vaccine);
         System.out.println("Saved vaccine with ID: " + savedVaccine.getId() + 
             ", Category: " + (savedVaccine.getCategoryID() != null ? savedVaccine.getCategoryID().getCategoryName() : "none") +
             ", Image: " + savedVaccine.getImagineUrl());
@@ -86,7 +86,7 @@ public class VaccineService {
     @Transactional(readOnly = true)
     public List<VaccineDTO> getVaccines() {
         try {
-            List<Vaccine> vaccines = vaccineRepo.findAll();
+            List<Vaccine> vaccines = vaccineRepository.findAll();
             return vaccines.stream().map(this::convertToDTO).collect(Collectors.toList());
         } catch (Exception e) {
             System.err.println("Error in VaccineService.getVaccines: " + e.getMessage());
@@ -127,11 +127,11 @@ public class VaccineService {
     }
 
     public List<Vaccine> searchByName(String vaccineName) {
-        return vaccineRepo.findByNameContainingIgnoreCase(vaccineName);
+        return vaccineRepository.findByNameContainingIgnoreCase(vaccineName);
     }
 
     public void deleteVaccine(Long id) {
-        Vaccine vaccine = vaccineRepo.findById(id)
+        Vaccine vaccine = vaccineRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Vaccine not found with id: " + id));
         
         // Delete the associated image file if it exists
@@ -139,11 +139,11 @@ public class VaccineService {
             fileStorageService.deleteFile(vaccine.getImagineUrl());
         }
         
-        vaccineRepo.deleteById(id);
+        vaccineRepository.deleteById(id);
     }
 
     public Vaccine updateVaccine(Long id, VaccineRequest request, MultipartFile imageFile, String categoryName) {
-        Vaccine vaccine = vaccineRepo.findById(id)
+        Vaccine vaccine = vaccineRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Vaccine not found with id: " + id));
         
         System.out.println("Updating vaccine with price: " + request.getPrice());
@@ -182,7 +182,7 @@ public class VaccineService {
             vaccine.setImagineUrl(fileName);
         }
         
-        return vaccineRepo.save(vaccine);
+        return vaccineRepository.save(vaccine);
     }
 
     public byte[] getVaccineImage(String fileName) throws IOException {

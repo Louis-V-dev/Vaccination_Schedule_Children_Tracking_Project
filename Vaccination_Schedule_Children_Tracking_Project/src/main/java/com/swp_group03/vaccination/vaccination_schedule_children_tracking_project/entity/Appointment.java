@@ -1,120 +1,89 @@
 package com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
-import lombok.experimental.FieldDefaults;
-
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.ArrayList;
 
 @Entity
 @Table(name = "appointments")
-@Data
-@Builder
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@FieldDefaults(level = AccessLevel.PRIVATE)
-@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@Builder
 public class Appointment {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "appointment_id")
-    Long id;
-    
+    private Long id;
+
     @ManyToOne
     @JoinColumn(name = "child_id", nullable = false)
-    @JsonIgnoreProperties({"appointments", "healthRecords", "vaccineRecords", "account_Id"})
-    Child child;
-    
+    private Child child;
+
     @ManyToOne
-    @JoinColumn(name = "guardian_id", nullable = false)
-    @JsonIgnoreProperties({"appointments", "children", "password", "roles", "verificationCode", "verificationCodeExpiry"})
-    Account guardian;
-    
+    @JoinColumn(name = "work_schedule_id", nullable = false)
+    private WorkSchedule workSchedule;
+
     @ManyToOne
-    @JoinColumn(name = "time_slot_id", nullable = false)
-    TimeSlot timeSlot;
-    
-    @Column(name = "appointment_date", nullable = false)
-    LocalDate appointmentDate;
-    
+    @JoinColumn(name = "doctor_id", nullable = false)
+    private Account doctor;
+
     @ManyToOne
-    @JoinColumn(name = "selected_doctor_id")
-    @JsonIgnoreProperties({"appointments", "password", "roles", "verificationCode", "verificationCodeExpiry"})
-    Account doctor;
-    
-    @ManyToOne
-    @JoinColumn(name = "assigned_doctor_id")
-    Account assignedDoctor;
-    
-    @ManyToOne
-    @JoinColumn(name = "assigned_nurse_id")
-    Account assignedNurse;
-    
-    @ManyToOne
-    @JoinColumn(name = "assigned_staff_id")
-    Account assignedStaff;
-    
+    @JoinColumn(name = "nurse_id")
+    private Account nurse;
+
+    @Column(nullable = false)
+    private LocalDateTime appointmentTime;
+
+    @Column(nullable = false)
+    private String timeSlot;
+
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
-    AppointmentStatus status = AppointmentStatus.BOOKED;
-    
+    @Column(nullable = false)
+    private AppointmentStatus status;
+
+    private String notes;
+
+    @Column(nullable = false)
+    private boolean isPaid;
+
+    @Column(nullable = false)
+    private Double totalAmount;
+
     @ManyToOne
     @JoinColumn(name = "payment_id")
-    Payment payment;
-    
-    @OneToMany(mappedBy = "appointment", cascade = CascadeType.ALL, orphanRemoval = true)
-    List<AppointmentVaccine> appointmentVaccines = new ArrayList<>();
-    
-    @Column(name = "total_vaccines")
-    Integer totalVaccines = 0;
-    
-    @Column(name = "is_multi_vaccine_appointment")
-    Boolean isMultiVaccineAppointment = false;
-    
-    @Column(name = "appointment_units")
-    Integer appointmentUnits = 1;
-    
-    @Column(name = "all_vaccines_eligible")
-    Boolean allVaccinesEligible;
-    
-    @Column(name = "notes", length = 500)
-    String notes;
-    
+    private Payment payment;
+
     @Column(name = "created_at")
-    LocalDateTime createdAt;
-    
+    private LocalDateTime createdAt;
+
     @Column(name = "updated_at")
-    LocalDateTime updatedAt;
-    
-    @Column(name = "status_updated_at")
-    LocalDateTime statusUpdatedAt;
-    
-    @OneToOne(mappedBy = "appointment")
-    @JsonIgnoreProperties({"appointment", "child", "doctor"})
-    HealthRecord healthRecord;
-    
-    @OneToOne(mappedBy = "appointment")
-    VaccineAdministrationBatch administrationBatch;
-    
-    @OneToOne(mappedBy = "appointment")
-    PostVaccinationMonitoring monitoring;
-    
+    private LocalDateTime updatedAt;
+
+    @Builder.Default
+    @OneToMany(mappedBy = "appointment", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<AppointmentVaccine> appointmentVaccines = new ArrayList<>();
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
-        statusUpdatedAt = LocalDateTime.now();
-        if (status == null) {
-            status = AppointmentStatus.BOOKED;
-        }
+        if (status == null) status = AppointmentStatus.PENDING;
+        if (totalAmount == null) totalAmount = 0.0;
     }
-    
+
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+
+    public void setStatus(String status) {
+        this.status = AppointmentStatus.valueOf(status);
+    }
+
+    public String getStatus() {
+        return status != null ? status.name() : null;
     }
 } 

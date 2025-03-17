@@ -7,7 +7,7 @@ import com.swp_group03.vaccination.vaccination_schedule_children_tracking_projec
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.exception.AppException;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.exception.ErrorCode;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.repository.DoseIntervalRepository;
-import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.repository.VaccineRepo;
+import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.repository.VaccineRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,10 +21,12 @@ import java.util.ArrayList;
 public class DoseIntervalService {
 
     private final DoseIntervalRepository doseIntervalRepository;
-    private final VaccineRepo vaccineRepo;
+    private final VaccineRepository vaccineRepo;
 
     public List<DoseIntervalResponse> getIntervalsForVaccine(Long vaccineId) {
-        return doseIntervalRepository.findByVaccineIdOrderByFromDoseAsc(vaccineId)
+        Vaccine vaccine = vaccineRepo.findById(vaccineId)
+                .orElseThrow(() -> new AppException(ErrorCode.VACCINE_NOT_FOUND));
+        return doseIntervalRepository.findByVaccineOrderByFromDoseAsc(vaccine)
                 .stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -41,7 +43,7 @@ public class DoseIntervalService {
         }
 
         // Check for overlapping intervals
-        List<DoseInterval> existingIntervals = doseIntervalRepository.findByVaccineIdOrderByFromDoseAsc(vaccineId);
+        List<DoseInterval> existingIntervals = doseIntervalRepository.findByVaccineOrderByFromDoseAsc(vaccine);
         for (DoseInterval existing : existingIntervals) {
             if ((request.getFromDose() <= existing.getToDose() && request.getToDose() >= existing.getFromDose())) {
                 throw new AppException(ErrorCode.INTERVAL_OVERLAP);
@@ -77,7 +79,7 @@ public class DoseIntervalService {
         }
 
         // Check for overlapping intervals (excluding this interval)
-        List<DoseInterval> existingIntervals = doseIntervalRepository.findByVaccineIdOrderByFromDoseAsc(vaccineId);
+        List<DoseInterval> existingIntervals = doseIntervalRepository.findByVaccineOrderByFromDoseAsc(vaccine);
         for (DoseInterval existing : existingIntervals) {
             if (existing.getId().equals(intervalId)) {
                 continue; // Skip the current interval

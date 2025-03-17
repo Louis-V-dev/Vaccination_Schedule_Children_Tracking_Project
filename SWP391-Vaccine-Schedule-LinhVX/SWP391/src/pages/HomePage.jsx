@@ -59,7 +59,7 @@ const HomePage = () => {
 								transition={{ duration: 0.8, delay: 0.4 }}
 							>
 								{isLoggedIn ? (
-									<Button as={Link} to="/appointments/new" className="btn-cta">
+									<Button as={Link} to="/booking" className="btn-cta">
 										Schedule Your Vaccination
 									</Button>
 								) : (
@@ -259,7 +259,7 @@ const HomePage = () => {
 						viewport={{ once: true }}
 					>
 						{isLoggedIn ? (
-							<Button as={Link} to="/appointments/new" className="btn-cta">
+							<Button as={Link} to="/booking" className="btn-cta">
 								Book Your Appointment
 							</Button>
 						) : (

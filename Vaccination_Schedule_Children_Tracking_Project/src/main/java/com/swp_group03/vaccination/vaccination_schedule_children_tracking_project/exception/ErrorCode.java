@@ -10,6 +10,7 @@ public enum ErrorCode {
     UNCATEGORIZED_EXCEPTION(9999, "Uncategorized exception"),
     INVALID_DATA_ACCESS_RESOURCE_USAGE(9998, "Invalid data access resource usage (SQL syntax, table not exist, etc)"),
     SYSTEM_ERROR(9997, "System error occurred"),
+    INTERNAL_SERVER_ERROR(9996, "Internal server error"),
 
     // Common errors (1xxx)
     USER_NOT_FOUND(1001, "User not found"),
@@ -32,6 +33,8 @@ public enum ErrorCode {
     INVALID_EMAIL(1018, "Invalid email address"),
     INVALID_PASSWORD(1019, "Invalid password"),
     INVALID_TOKEN(1020, "Invalid token"),
+    FORBIDDEN(1021, "Access forbidden"),
+    NOT_FOUND(1022, "Resource not found"),
 
     // Authentication errors (2xxx)
     INVALID_KEY(2000, "Invalid message key"),
@@ -74,7 +77,31 @@ public enum ErrorCode {
     REQUEST_ALREADY_PROCESSED(3014, "Request has already been processed"),
     SHIFT_CHANGE_REQUEST_NOT_ALLOWED(3015, "Shift change request is not allowed for this schedule"),
     PATTERN_NOT_FOUND(3016, "Pattern not found"),
-    SCHEDULE_CREATION_FAILED(3017, "Failed to create schedule");
+    SCHEDULE_CREATION_FAILED(3017, "Failed to create schedule"),
+    NO_AVAILABLE_SCHEDULE(3018, "No available schedule found"),
+    DOCTOR_NOT_AVAILABLE(3019, "Doctor is not available"),
+    TIME_SLOT_FULL(3020, "Time slot is full"),
+
+    // Child related errors (5xxx)
+    CHILD_NOT_FOUND(5000, "Child not found"),
+    CHILD_ALREADY_EXISTS(5001, "Child already exists"),
+
+    // Vaccine related errors (6xxx)
+    VACCINE_OF_CHILD_NOT_FOUND(6000, "Vaccine of child not found"),
+    VACCINE_ALREADY_EXISTS(6001, "Vaccine already exists"),
+
+    // Appointment related errors (7xxx)
+    APPOINTMENT_NOT_FOUND(7000, "Appointment not found"),
+    APPOINTMENT_ALREADY_EXISTS(7001, "Appointment already exists"),
+
+    // Dose related errors (8xxx)
+    DOSE_SCHEDULE_NOT_FOUND(8000, "Dose schedule not found"),
+    DOSE_ALREADY_SCHEDULED(8001, "Dose already scheduled"),
+    INVALID_DOSE_NUMBER(8002, "Invalid dose number"),
+
+    // Payment related errors (10xxx)
+    PAYMENT_FAILED(10000, "Payment failed"),
+    PAYMENT_ALREADY_PROCESSED(10001, "Payment already processed");
 
     private final int code;
     private final String message;

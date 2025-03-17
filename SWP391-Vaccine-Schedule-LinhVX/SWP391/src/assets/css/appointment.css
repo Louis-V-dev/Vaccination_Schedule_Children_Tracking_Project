@@ -1,0 +1,184 @@
+/* Appointment Creation Styles */
+.appointment-creation-page {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+}
+
+/* Calendar Styles */
+.calendar-container {
+    margin-top: 1rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    overflow: hidden;
+    background-color: white;
+}
+
+.calendar-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background-color: #f8f9fa;
+    font-weight: bold;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.calendar-header div {
+    padding: 0.5rem;
+    text-align: center;
+    font-size: 0.9rem;
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+}
+
+.calendar-day {
+    aspect-ratio: 1 / 1;
+    border-right: 1px solid #eee;
+    border-bottom: 1px solid #eee;
+    padding: 0.5rem;
+    position: relative;
+}
+
+.calendar-day:nth-child(7n) {
+    border-right: none;
+}
+
+.calendar-day.empty {
+    background-color: #f8f9fa;
+}
+
+.calendar-day.past {
+    background-color: #f8f9fa;
+    color: #adb5bd;
+    cursor: not-allowed;
+}
+
+.calendar-day.available {
+    cursor: pointer;
+    background-color: #e8f4ff;
+    transition: all 0.2s ease;
+}
+
+.calendar-day.available:hover {
+    background-color: #cce5ff;
+    transform: scale(1.05);
+    z-index: 1;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.calendar-day.selected {
+    background-color: #007bff;
+    color: white;
+}
+
+.calendar-day.selected .doctor-count {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.calendar-day.unavailable {
+    color: #6c757d;
+    background-color: #f8f9fa;
+}
+
+.calendar-day.doctor-unavailable {
+    position: relative;
+}
+
+.calendar-day.doctor-unavailable::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: repeating-linear-gradient(
+        45deg,
+        rgba(0, 0, 0, 0.05),
+        rgba(0, 0, 0, 0.05) 10px,
+        transparent 10px,
+        transparent 20px
+    );
+}
+
+.day-number {
+    font-weight: bold;
+    font-size: 1.1rem;
+    margin-bottom: 0.25rem;
+}
+
+.doctor-count {
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+/* Time slot cards */
+.time-slot-card {
+    transition: all 0.3s ease;
+    height: 100%;
+}
+
+.time-slot-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.time-slot-card.selected {
+    border-color: #007bff;
+    border-width: 2px;
+}
+
+/* Doctor cards */
+.doctor-card {
+    transition: all 0.3s ease;
+    height: 100%;
+}
+
+.doctor-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.doctor-card.selected {
+    border-color: #007bff;
+    border-width: 2px;
+}
+
+/* Time Slots Grid */
+.time-slots-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.time-slot-button {
+    height: 100%;
+    min-height: 60px;
+    white-space: normal;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.time-slot-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .calendar-day .day-number {
+        font-size: 14px;
+    }
+    
+    .calendar-day .doctor-count {
+        font-size: 8px;
+    }
+    
+    .time-slots-grid {
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    }
+} 

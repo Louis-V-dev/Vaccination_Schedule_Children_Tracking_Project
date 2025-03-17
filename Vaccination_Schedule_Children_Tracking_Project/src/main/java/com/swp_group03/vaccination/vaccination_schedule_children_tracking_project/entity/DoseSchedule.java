@@ -2,38 +2,37 @@ package com.swp_group03.vaccination.vaccination_schedule_children_tracking_proje
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "appointment_vaccines")
+@Table(name = "dose_schedules")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class AppointmentVaccine {
+public class DoseSchedule {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne
-    @JoinColumn(name = "appointment_id", nullable = false)
-    private Appointment appointment;
-
-    @ManyToOne
     @JoinColumn(name = "vaccine_of_child_id", nullable = false)
     private VaccineOfChild vaccineOfChild;
-
-    @ManyToOne
-    @JoinColumn(name = "dose_schedule_id")
-    private DoseSchedule doseSchedule;
 
     @Column(nullable = false)
     private Integer doseNumber;
 
+    @Column(name = "scheduled_date")
+    private LocalDate scheduledDate;
+
+    @Column(name = "actual_date")
+    private LocalDateTime actualDate;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private VaccinationStatus status;
+    private DoseStatus status;
 
     @Column(name = "notes")
     private String notes;
@@ -48,7 +47,7 @@ public class AppointmentVaccine {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
-        if (status == null) status = VaccinationStatus.PENDING;
+        if (status == null) status = DoseStatus.UNSCHEDULED;
     }
 
     @PreUpdate
@@ -57,7 +56,7 @@ public class AppointmentVaccine {
     }
 
     public void setStatus(String status) {
-        this.status = VaccinationStatus.valueOf(status);
+        this.status = DoseStatus.valueOf(status);
     }
 
     public String getStatus() {

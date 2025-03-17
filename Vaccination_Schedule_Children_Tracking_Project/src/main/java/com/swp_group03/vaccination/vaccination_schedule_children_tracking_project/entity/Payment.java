@@ -26,9 +26,7 @@ public class Payment {
     @JoinColumn(name = "user_id", nullable = false)
     Account user;
     
-    @OneToMany(mappedBy = "payment")
-    List<Appointment> appointments = new ArrayList<>();
-    
+
     @Column(name = "amount", nullable = false, precision = 10, scale = 2)
     BigDecimal amount;
     
@@ -101,23 +99,7 @@ public class Payment {
         updatedAt = LocalDateTime.now();
     }
     
-    /**
-     * Add an appointment to this payment
-     * @param appointment The appointment to add
-     */
-    public void addAppointment(Appointment appointment) {
-        appointments.add(appointment);
-        appointment.setPayment(this);
-    }
-    
-    /**
-     * Remove an appointment from this payment
-     * @param appointment The appointment to remove
-     */
-    public void removeAppointment(Appointment appointment) {
-        appointments.remove(appointment);
-        appointment.setPayment(null);
-    }
+
     
     /**
      * Add a payment history entry to this payment

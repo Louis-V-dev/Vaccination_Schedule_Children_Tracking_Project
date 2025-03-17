@@ -43,10 +43,10 @@ public class ShiftChangeRequestService {
     private ScheduleMapper scheduleMapper;
 
     public ShiftChangeRequestResponse createRequest(Account requester, ShiftChangeRequestDTO dto) {
-        WorkSchedule originalSchedule = workScheduleRepository.findById(dto.getOriginalScheduleId())
+        WorkSchedule originalSchedule = workScheduleRepository.findById(Long.parseLong(dto.getOriginalScheduleId()))
             .orElseThrow(() -> new AppException(ErrorCode.SCHEDULE_NOT_FOUND));
             
-        WorkSchedule targetSchedule = workScheduleRepository.findById(dto.getTargetScheduleId())
+        WorkSchedule targetSchedule = workScheduleRepository.findById(Long.parseLong(dto.getTargetScheduleId()))
             .orElseThrow(() -> new AppException(ErrorCode.SCHEDULE_NOT_FOUND));
 
         // Validate requester owns the original schedule
@@ -218,10 +218,10 @@ public class ShiftChangeRequestService {
     }
 
     public ShiftChangeRequest createShiftChangeRequest(ShiftChangeRequestDTO requestDTO) {
-        WorkSchedule originalSchedule = workScheduleRepository.findById(requestDTO.getOriginalScheduleId())
+        WorkSchedule originalSchedule = workScheduleRepository.findById(Long.parseLong(requestDTO.getOriginalScheduleId()))
                 .orElseThrow(() -> new AppException(ErrorCode.SCHEDULE_NOT_FOUND));
 
-        WorkSchedule targetSchedule = workScheduleRepository.findById(requestDTO.getTargetScheduleId())
+        WorkSchedule targetSchedule = workScheduleRepository.findById(Long.parseLong(requestDTO.getTargetScheduleId()))
                 .orElseThrow(() -> new AppException(ErrorCode.SCHEDULE_NOT_FOUND));
 
         if (!canRequestShiftChange(originalSchedule)) {

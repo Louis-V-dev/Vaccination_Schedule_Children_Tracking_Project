@@ -1,10 +1,7 @@
 package com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.service;
 
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.Account;
-import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.Appointment;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.Child;
-import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.HealthRecord;
-import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.VaccineRecord;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.mapper.ChildMapper;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.model.request.ChildrenRequest;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.repository.ChildRepo;
@@ -180,36 +177,7 @@ public class ChildService {
         return childRepo.searchActiveChildren(name, gender, bloodType);
     }
     
-    /**
-     * Get health records for a child
-     * @param childId The child ID
-     * @return List of health records
-     */
-    public List<HealthRecord> getChildHealthRecords(String childId) {
-        Child child = getChildById(childId);
-        return child.getHealthRecords();
-    }
-    
-    /**
-     * Get vaccine records for a child
-     * @param childId The child ID
-     * @return List of vaccine records
-     */
-    public List<VaccineRecord> getChildVaccineRecords(String childId) {
-        Child child = getChildById(childId);
-        return child.getVaccineRecords();
-    }
-    
-    /**
-     * Get appointments for a child
-     * @param childId The child ID
-     * @return List of appointments
-     */
-    public List<Appointment> getChildAppointments(String childId) {
-        Child child = getChildById(childId);
-        return child.getAppointments();
-    }
-    
+
     /**
      * Deactivate a child by ID
      * @param id The child ID

@@ -16,11 +16,12 @@ import PaymentList from "./admin/payment/PaymentList";
 import PaymentManage from './admin/payment/PaymentManage';
 import HealthRecord from './pages/HealthRecord';
 import HealthRecordDetail from './pages/HealthRecordDetail';
-import AppointmentDetail from './pages/AppointmentDetail';
+import PaymentResult from './pages/PaymentResult';
+import PaymentExample from './pages/PaymentExample';
+import AppointmentCreation from './user/AppointmentCreation';
 
 
 // Create placeholder components for the routes we'll implement later
-const BookingPage = () => <div>Booking Schedule page will be implemented soon.</div>;
 const VaccinationHistoryPage = () => <div>Vaccination History page will be implemented soon.</div>;
 const ServicePackagePage = () => <div>Service Package page will be implemented soon.</div>;
 const VaccineDetailPage = () => <div>Vaccine Detail page will be implemented soon.</div>;
@@ -38,12 +39,13 @@ function App() {
 			{/* User pages */}
 			<Route path={"/profile"} element={<ProfilePage />} />
 			<Route path={"/children"} element={<ChildrenManagement />} />
-			<Route path={"/booking"} element={<BookingPage />} />
+			<Route path={"/booking"} element={<AppointmentCreation />} />
 			<Route path={"/vaccination-history"} element={<VaccinationHistoryPage />} />
 			<Route path={"/service-package"} element={<ServicePackagePage />} />
 			<Route path={"/health-records"} element={<HealthRecord />} />
 			<Route path={"/health-records/:id"} element={<HealthRecordDetail />} />
-			<Route path={"/appointments/:id"} element={<AppointmentDetail />} />
+			<Route path={"/payment/result"} element={<PaymentResult />} />
+			<Route path={"/payment/example"} element={<PaymentExample />} />
 
 			{/*Admin page*/}
 			<Route path={"/ManageAccount"} element={<AccountManage />} />

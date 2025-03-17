@@ -1,10 +1,16 @@
 package com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.model.response;
 
 import lombok.Data;
+import lombok.Builder;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class VaccineDTO {
     private Long id;
     private String name;

@@ -5,12 +5,12 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "health_records")
+@Table(name = "post_vaccination_care")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class HealthRecord {
+public class PostVaccinationCare {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -20,20 +20,17 @@ public class HealthRecord {
     private AppointmentVaccine appointmentVaccine;
 
     @ManyToOne
-    @JoinColumn(name = "doctor_id", nullable = false)
-    private Account doctor;
+    @JoinColumn(name = "staff_id", nullable = false)
+    private Account staff;
 
-    @Column(name = "pre_vaccination_health")
-    private String preVaccinationHealth;
+    @Column(name = "observation_start_time")
+    private LocalDateTime observationStartTime;
+
+    @Column(name = "observation_end_time")
+    private LocalDateTime observationEndTime;
 
     @Column(name = "temperature")
     private Float temperature;
-
-    @Column(name = "weight")
-    private Float weight;
-
-    @Column(name = "height")
-    private Float height;
 
     @Column(name = "blood_pressure")
     private String bloodPressure;
@@ -41,23 +38,20 @@ public class HealthRecord {
     @Column(name = "heart_rate")
     private Integer heartRate;
 
-    @Column(name = "allergies")
-    private String allergies;
+    @Column(name = "immediate_reactions")
+    private String immediateReactions;
 
-    @Column(name = "current_medications")
-    private String currentMedications;
+    @Column(name = "treatment_provided")
+    private String treatmentProvided;
 
-    @Column(name = "doctor_notes")
-    private String doctorNotes;
+    @Column(name = "staff_notes")
+    private String staffNotes;
 
-    @Column(name = "vaccination_approved")
-    private Boolean vaccinationApproved;
+    @Column(name = "follow_up_needed")
+    private Boolean followUpNeeded;
 
-    @Column(name = "rejection_reason")
-    private String rejectionReason;
-
-    @Column(name = "next_appointment_recommendations")
-    private String nextAppointmentRecommendations;
+    @Column(name = "follow_up_instructions")
+    private String followUpInstructions;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
