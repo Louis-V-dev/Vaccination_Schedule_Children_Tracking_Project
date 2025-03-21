@@ -3,9 +3,17 @@ package com.swp_group03.vaccination.vaccination_schedule_children_tracking_proje
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.dto.MomoPaymentRequestDTO;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.dto.MomoPaymentResponseDTO;
+import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.Appointment;
+import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.AppointmentVaccine;
+import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.DoseSchedule;
+import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.AppointmentStatus;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.Payment;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.PaymentMethod;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity.PaymentStatus;
+import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.exception.AppException;
+import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.exception.ErrorCode;
+import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.repository.AppointmentRepository;
+import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.repository.DoseScheduleRepository;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.repository.PaymentMethodRepository;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.repository.PaymentRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,10 +27,13 @@ import org.springframework.web.client.RestTemplate;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Formatter;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -42,7 +53,7 @@ public class MomoPaymentService {
     @Value("${momo.api.endpoint}")
     private String apiEndpoint;
 
-    @Value("${momo.return.url}")
+    @Value("${momo.return.url:#{null}}")
     private String returnUrl;
 
     @Value("${momo.notify.url}")
@@ -60,132 +71,157 @@ public class MomoPaymentService {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private AppointmentRepository appointmentRepository;
+
+    @Autowired
+    private DoseScheduleRepository doseScheduleRepository;
+
+    @Autowired
+    private AppointmentService appointmentService;
+
     /**
      * Create a MoMo payment request
-     * @param request Payment request details
-     * @return MoMo payment response with payment URL
+     * @param request Payment request DTO
+     * @return MoMo payment response DTO
      */
     public MomoPaymentResponseDTO createPayment(MomoPaymentRequestDTO request) {
         try {
-            // Generate orderInfo if not provided
-            String orderInfo = request.getOrderInfo() != null ? request.getOrderInfo() : "Payment for vaccination services";
+            // Get appointment ID from request
+            Long appointmentId = request.getAppointmentId();
+            if (appointmentId == null) {
+                throw new IllegalArgumentException("Appointment ID is required");
+            }
             
-            // Generate orderId with prefix and timestamp if not provided
-            String orderId = request.getOrderId() != null ? request.getOrderId() : 
-                             partnerCode + System.currentTimeMillis();
+            // Find appointment
+            Appointment appointment = appointmentRepository.findById(appointmentId)
+                .orElseThrow(() -> new IllegalArgumentException("Appointment not found"));
             
-            // Generate requestId (same as orderId)
+            // Create order info
+            String orderId = partnerCode + System.currentTimeMillis();
             String requestId = orderId;
+            // Use order info from request or create default
+            String orderInfo = request.getOrderInfo() != null ? request.getOrderInfo() 
+                              : "Payment for appointment #" + appointmentId;
             
-            // Convert amount to string (required by MoMo)
-            String amount = request.getAmount().toString();
+            // Use URLs from request or fallback to configured values
+            // If returnUrl is null or empty, use the returnUrl from the request
+            String redirectUrl = request.getReturnUrl();
+            // Only fallback to the injected returnUrl if it's not null or empty and the request doesn't provide one
+            if ((redirectUrl == null || redirectUrl.isEmpty()) && returnUrl != null && !returnUrl.isEmpty()) {
+                redirectUrl = returnUrl;
+            }
+            // If still null, use a default value
+            if (redirectUrl == null || redirectUrl.isEmpty()) {
+                redirectUrl = "http://localhost:3000/appointment-creation";
+            }
             
-            // Set extraData if provided or empty
-            String extraData = request.getExtraData() != null ? request.getExtraData() : "";
+            String ipnUrl = request.getNotifyUrl() != null ? request.getNotifyUrl() : notifyUrl;
             
-            // Use provided return URL or default
-            String returnUrl = request.getReturnUrl() != null ? request.getReturnUrl() : this.returnUrl;
+            // Use extraData from request or default to appointmentId
+            String extraData = request.getExtraData() != null ? request.getExtraData()
+                              : String.valueOf(appointmentId);
             
-            // Use provided notify URL or default
-            String notifyUrl = request.getNotifyUrl() != null ? request.getNotifyUrl() : this.notifyUrl;
+            // Amount in VND
+            long amount = request.getAmount().longValue();
             
-            // Get requestType or default to captureWallet
-            String requestType = request.getRequestType() != null ? request.getRequestType() : "captureWallet";
-            
-            // Create raw signature string - ensure parameters are in alphabetical order by key name
+            // Update the rawSignature creation to use the validated requestType
+            String requestType = validateAndGetRequestType(request);
+
+            // Create raw signature string
             String rawSignature = "accessKey=" + accessKey +
                                   "&amount=" + amount +
                                   "&extraData=" + extraData +
-                                  "&ipnUrl=" + notifyUrl +
+                                  "&ipnUrl=" + ipnUrl +
                                   "&orderId=" + orderId +
                                   "&orderInfo=" + orderInfo +
                                   "&partnerCode=" + partnerCode +
-                                  "&redirectUrl=" + returnUrl +
+                                  "&redirectUrl=" + redirectUrl +
                                   "&requestId=" + requestId +
                                   "&requestType=" + requestType;
             
-            // Log raw signature string for debugging
-            System.out.println("Raw signature: " + rawSignature);
-            
-            // Create HMAC SHA256 signature
-            String signature = "";
-            try {
-                Mac sha256_HMAC = Mac.getInstance("HmacSHA256");
-                SecretKeySpec secret_key = new SecretKeySpec(secretKey.getBytes(), "HmacSHA256");
-                sha256_HMAC.init(secret_key);
-                byte[] hash = sha256_HMAC.doFinal(rawSignature.getBytes());
-                signature = bytesToHex(hash);
-                
-                System.out.println("Signature: " + signature);
-            } catch (Exception e) {
-                System.err.println("Error creating signature: " + e.getMessage());
-                throw new RuntimeException("Error creating signature", e);
-            }
+            // Create signature
+            String signature = createSignature(rawSignature, secretKey);
             
             // Create request body
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("partnerCode", partnerCode);
-            requestBody.put("accessKey", accessKey);
+            requestBody.put("partnerName", "Vaccination System");
+            requestBody.put("storeId", partnerCode);
             requestBody.put("requestId", requestId);
             requestBody.put("amount", amount);
             requestBody.put("orderId", orderId);
             requestBody.put("orderInfo", orderInfo);
-            requestBody.put("redirectUrl", returnUrl);
-            requestBody.put("ipnUrl", notifyUrl);
+            requestBody.put("redirectUrl", redirectUrl);
+            requestBody.put("ipnUrl", ipnUrl);
+            requestBody.put("lang", "vi");
             requestBody.put("extraData", extraData);
             requestBody.put("requestType", requestType);
             requestBody.put("signature", signature);
-            requestBody.put("lang", "en");
             
-            // Create HTTP headers
+            // Convert request body to JSON
+            String requestBodyJson = objectMapper.writeValueAsString(requestBody);
+            
+            // Set headers
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             
-            // Create HTTP entity
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+            // Send request to MoMo API
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                apiEndpoint + "/v2/gateway/api/create",
+                new HttpEntity<>(requestBodyJson, headers),
+                Map.class
+            );
             
-            // Call MoMo API
-            String apiUrl = apiEndpoint + "/v2/gateway/api/create";
-            System.out.println("Calling MoMo API: " + apiUrl);
-            System.out.println("Request body: " + requestBody);
+            // Get response body
+            Map<String, Object> responseBody = response.getBody();
             
-            ResponseEntity<String> response = restTemplate.postForEntity(apiUrl, entity, String.class);
-            System.out.println("Raw response: " + response.getBody());
-            
-            // Parse response
-            MomoPaymentResponseDTO responseBody = objectMapper.readValue(response.getBody(), MomoPaymentResponseDTO.class);
-            
-            System.out.println("MoMo payment response: " + responseBody);
-            
-            // Log specific QR code URL
-            if (responseBody != null) {
-                System.out.println("QR Code URL: " + responseBody.getQrCodeUrl());
-                System.out.println("Pay URL: " + responseBody.getPayUrl());
-            }
-            
-            // If successfully created payment request, save to database
-            if (responseBody != null && responseBody.getResultCode() == 0) {
-                // Find MoMo payment method
-                Optional<PaymentMethod> paymentMethodOpt = paymentMethodRepository.findByCode("MOMO");
+            // Check if payment request was created successfully
+            if (responseBody != null && responseBody.containsKey("payUrl")) {
+                // Create payment record
+                Payment payment = Payment.builder()
+                    .user(appointment.getChild().getAccount_Id())
+                    .amount(BigDecimal.valueOf(amount))
+                    .totalAmount(BigDecimal.valueOf(amount))
+                    .status(PaymentStatus.PENDING)
+                    .transactionId(orderId)
+                    .build();
                 
-                if (paymentMethodOpt.isPresent()) {
-                    // Create payment entity
-                    Payment payment = new Payment();
-                    payment.setTransactionId(orderId);
-                    payment.setAmount(request.getAmount());
-                    payment.setTotalAmount(request.getAmount());
-                    payment.setStatus(PaymentStatus.PENDING);
-                    payment.setPaymentMethod(paymentMethodOpt.get());
-                    payment.setCreatedAt(LocalDateTime.now());
-                    payment.setExpirationDate(LocalDateTime.now().plusMinutes(15)); // 15 minute expiration
-                    payment.setGatewayResponse(objectMapper.writeValueAsString(responseBody));
-                    
-                    // Save payment
-                    paymentRepository.save(payment);
+                // Get payment method
+                Optional<PaymentMethod> paymentMethod = paymentMethodRepository.findByCode("MOMO");
+                if (paymentMethod.isPresent()) {
+                    payment.setPaymentMethod(paymentMethod.get());
                 }
+                
+                // Set expiration date (30 minutes from now)
+                payment.setExpirationDate(LocalDateTime.now().plusMinutes(30));
+                
+                // Save payment and link to appointment
+                payment = paymentRepository.save(payment);
+                
+                // Update appointment with payment
+                // appointment.setPayment(payment); // Uncomment when the setPayment method is implemented in Appointment class
+                appointmentRepository.save(appointment);
+                
+                // Update appointment
+                appointment.setStatus(AppointmentStatus.PAID);
+                appointment.setPaid(true);
+                
+                // Create response DTO
+                MomoPaymentResponseDTO responseDTO = new MomoPaymentResponseDTO();
+                responseDTO.setPaymentUrl((String) responseBody.get("payUrl"));
+                responseDTO.setTransactionId(orderId);
+                responseDTO.setAmountDecimal(BigDecimal.valueOf(amount));
+                
+                return responseDTO;
+            } else {
+                // Handle error
+                String message = "Unknown error";
+                if (responseBody != null && responseBody.containsKey("message")) {
+                    message = responseBody.get("message").toString();
+                }
+                throw new RuntimeException("Error creating MoMo payment: " + message);
             }
-            
-            return responseBody;
         } catch (Exception e) {
             throw new RuntimeException("Error creating MoMo payment: " + e.getMessage(), e);
         }
@@ -299,6 +335,9 @@ public class MomoPaymentService {
                         payment.setStatus(PaymentStatus.COMPLETED);
                         payment.setPaymentDate(LocalDateTime.now());
                         payment.setGatewayTransactionId((String) responseBody.get("transId"));
+                        
+                        // Mark associated appointment and doses as paid
+                        markAppointmentAndDosesAsPaid(payment);
                     } else if (resultCode == 1006 || resultCode == 1005) {
                         // Payment pending
                         payment.setStatus(PaymentStatus.PROCESSING);
@@ -335,73 +374,114 @@ public class MomoPaymentService {
     }
     
     /**
-     * Process IPN callback from MoMo
-     * @param callbackData Callback data from MoMo
+     * Process IPN (Instant Payment Notification) callback from MoMo
+     * @param callbackData The callback data from MoMo
      */
     public void processIpnCallback(Map<String, Object> callbackData) {
         try {
-            System.out.println("Processing IPN callback: " + callbackData);
+            // Log the callback data for debugging
+            System.out.println("Received IPN callback: " + callbackData);
             
+            // Extract data from the callback
             String orderId = (String) callbackData.get("orderId");
+            String requestId = (String) callbackData.get("requestId");
+            String amount = callbackData.get("amount").toString();
+            String resultCode = callbackData.get("resultCode").toString();
+            String message = (String) callbackData.get("message");
+            String extraData = (String) callbackData.get("extraData");
             
-            // Handle different types of resultCode
-            Object resultCodeObj = callbackData.get("resultCode");
-            int resultCode;
+            // Verify signature to ensure the callback is from MoMo
+            // ... Code to verify signature
             
-            if (resultCodeObj instanceof Integer) {
-                resultCode = (Integer) resultCodeObj;
-            } else if (resultCodeObj instanceof String) {
-                // Try to parse the string as an integer
-                try {
-                    resultCode = Integer.parseInt((String) resultCodeObj);
-                } catch (NumberFormatException e) {
-                    throw new IllegalArgumentException("Invalid resultCode format: " + resultCodeObj);
-                }
-            } else if (resultCodeObj == null) {
-                throw new IllegalArgumentException("Missing resultCode in callback data");
-            } else {
-                throw new IllegalArgumentException("Unexpected resultCode type: " + resultCodeObj.getClass().getName());
-            }
-            
-            String transId = (String) callbackData.get("transId");
-            
-            // Find payment in database
+            // Get payment from database
             Optional<Payment> paymentOpt = paymentRepository.findByTransactionId(orderId);
+            if (paymentOpt.isEmpty()) {
+                System.out.println("Payment not found for orderId: " + orderId);
+                return;
+            }
             
-            if (paymentOpt.isPresent()) {
-                Payment payment = paymentOpt.get();
-                System.out.println("Found payment in database, current status: " + payment.getStatus());
+            Payment payment = paymentOpt.get();
+            
+            // Update payment status based on result code
+            if ("0".equals(resultCode)) {
+                // Payment successful
+                payment.setStatus(PaymentStatus.COMPLETED);
                 
-                if (resultCode == 0) {
-                    // Payment successful
-                    payment.setStatus(PaymentStatus.COMPLETED);
-                    payment.setPaymentDate(LocalDateTime.now());
-                    payment.setGatewayTransactionId(transId);
-                    System.out.println("Payment marked as COMPLETED");
-                } else if (resultCode == 1003) {
-                    // Payment cancelled by user
-                    payment.setStatus(PaymentStatus.CANCELLED);
-                    System.out.println("Payment marked as CANCELLED");
-                } else if (resultCode == 1006 || resultCode == 1005) {
-                    // Payment pending
-                    payment.setStatus(PaymentStatus.PROCESSING);
-                    System.out.println("Payment marked as PROCESSING");
-                } else {
-                    // Payment failed
-                    payment.setStatus(PaymentStatus.FAILED);
-                    System.out.println("Payment marked as FAILED with resultCode: " + resultCode);
+                // Parse appointmentId from extraData
+                Long appointmentId = null;
+                try {
+                    appointmentId = Long.parseLong(extraData);
+                } catch (NumberFormatException e) {
+                    System.err.println("Failed to parse appointmentId from extraData: " + extraData);
                 }
                 
-                // Save updated payment
-                paymentRepository.save(payment);
-                System.out.println("Payment updated in database");
+                if (appointmentId != null) {
+                    // Find appointment by ID
+                    Optional<Appointment> appointmentOpt = appointmentRepository.findById(appointmentId);
+                    if (appointmentOpt.isPresent()) {
+                        Appointment appointment = appointmentOpt.get();
+                        appointment.setStatus(AppointmentStatus.PAID);
+                        appointment.setPaid(true);
+                        appointmentRepository.save(appointment);
+                        
+                        // Create VaccineOfChild and DoseSchedule records if needed
+                        appointmentService.processSuccessfulPayment(appointment);
+                    } else {
+                        System.err.println("Appointment not found with ID: " + appointmentId);
+                    }
+                }
             } else {
-                System.out.println("Payment not found in database for orderId: " + orderId);
+                // Payment failed
+                payment.setStatus(PaymentStatus.FAILED);
+                payment.setNotes("MoMo result code: " + resultCode + " - " + message);
             }
+            
+            // Save updated payment
+            paymentRepository.save(payment);
+            
+            System.out.println("IPN processing completed for orderId: " + orderId);
         } catch (Exception e) {
-            System.err.println("Error processing MoMo IPN callback: " + e.getMessage());
+            System.err.println("Error processing IPN callback: " + e.getMessage());
             e.printStackTrace();
-            throw new RuntimeException("Error processing MoMo IPN callback: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Mark an appointment and its first dose schedules as paid when payment is completed
+     * @param payment The completed payment
+     */
+    private void markAppointmentAndDosesAsPaid(Payment payment) {
+        try {
+            // Get appointment ID from payment extraData or other source
+            String extraData = payment.getTransactionId().split("-")[1];
+            Long appointmentId = null;
+            
+            try {
+                appointmentId = Long.parseLong(extraData);
+            } catch (NumberFormatException e) {
+                System.err.println("Failed to parse appointmentId from extraData: " + extraData);
+                return;
+            }
+            
+            // Find the appointment by ID
+            Optional<Appointment> appointmentOpt = appointmentRepository.findById(appointmentId);
+            if (appointmentOpt.isEmpty()) {
+                System.err.println("Appointment not found with ID: " + appointmentId);
+                return;
+            }
+            
+            Appointment appointment = appointmentOpt.get();
+            
+            // Mark appointment as paid
+            appointment.setPaid(true);
+            appointment.setStatus(AppointmentStatus.PAID);
+            
+            // Process any pending vaccine requests for this appointment
+            appointmentService.processVaccinesAfterPayment(appointment.getId());
+            
+            // The appointment will be saved as part of processVaccinesAfterPayment
+        } catch (Exception e) {
+            System.err.println("Error marking appointment as paid: " + e.getMessage());
         }
     }
     
@@ -455,5 +535,31 @@ public class MomoPaymentService {
             default:
                 return "Unknown payment status";
         }
+    }
+
+    // Add this method after validating the payment request
+    private String validateAndGetRequestType(MomoPaymentRequestDTO request) {
+        // Set default request type if not provided
+        if (request.getRequestType() == null || request.getRequestType().isEmpty()) {
+            return "captureWallet"; // Default to wallet
+        }
+        
+        // Validate that requestType is one of the supported values
+        String requestType = request.getRequestType();
+        
+        // The valid MoMo request types
+        List<String> validRequestTypes = Arrays.asList(
+            "captureWallet", // QR code payment
+            "payWithATM",    // ATM card payment
+            "payWithCC",     // Credit card payment
+            "payWithMoMo"    // MoMo app payment
+        );
+        
+        if (!validRequestTypes.contains(requestType)) {
+            System.out.println("Invalid request type: " + requestType + ". Using default captureWallet.");
+            return "captureWallet"; // Default if not valid
+        }
+        
+        return requestType;
     }
 } 

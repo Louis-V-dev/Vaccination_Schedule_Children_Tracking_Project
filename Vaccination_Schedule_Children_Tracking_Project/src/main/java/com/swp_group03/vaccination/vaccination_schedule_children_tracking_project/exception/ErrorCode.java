@@ -58,6 +58,7 @@ public enum ErrorCode {
     INVALID_NAME(4004, "Invalid name"),
     INVALID_GENDER(4005, "Invalid gender"),
     INVALID_DATE(4006, "Invalid date"),
+    INVALID_VACCINE_TYPE(4001, "Invalid vaccine type"),
 
     // Schedule errors (3xxx)
     SHIFT_NOT_FOUND(3000, "Shift not found"),
@@ -101,7 +102,8 @@ public enum ErrorCode {
 
     // Payment related errors (10xxx)
     PAYMENT_FAILED(10000, "Payment failed"),
-    PAYMENT_ALREADY_PROCESSED(10001, "Payment already processed");
+    PAYMENT_ALREADY_PROCESSED(10001, "Payment already processed"),
+    INVALID_PAYMENT_METHOD(10002, "Invalid payment method"), INVALID_APPOINTMENT_VACCINE_REQUEST(10003, "Invalid appointment vaccine request" );
 
     private final int code;
     private final String message;

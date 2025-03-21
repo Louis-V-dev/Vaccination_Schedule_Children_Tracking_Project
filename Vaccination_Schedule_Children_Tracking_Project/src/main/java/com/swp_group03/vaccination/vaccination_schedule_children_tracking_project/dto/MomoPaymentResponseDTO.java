@@ -4,6 +4,7 @@ import lombok.Data;
 import lombok.Builder;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
+import java.math.BigDecimal;
 
 @Data
 @Builder
@@ -21,4 +22,8 @@ public class MomoPaymentResponseDTO {
     private String qrCodeUrl;
     private String deeplink;
     private String deeplinkWebInApp;
+    
+    private String paymentUrl;
+    private String transactionId;
+    private BigDecimal amountDecimal;
 } 

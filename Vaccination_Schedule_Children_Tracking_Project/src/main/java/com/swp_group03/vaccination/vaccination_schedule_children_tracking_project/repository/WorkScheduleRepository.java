@@ -15,6 +15,7 @@ import java.util.Optional;
 public interface WorkScheduleRepository extends JpaRepository<WorkSchedule, Long> {
     List<WorkSchedule> findByWorkDateBetween(LocalDate startDate, LocalDate endDate);
     
+    @Query("SELECT ws FROM WorkSchedule ws WHERE ws.employee.accountId = ?1 AND ws.workDate BETWEEN ?2 AND ?3")
     List<WorkSchedule> findByEmployeeAccountIdAndWorkDateBetween(String employeeId, LocalDate startDate, LocalDate endDate);
     
     List<WorkSchedule> findByWorkDateBefore(LocalDate date);
@@ -50,4 +51,10 @@ public interface WorkScheduleRepository extends JpaRepository<WorkSchedule, Long
     
     @Query("SELECT ws FROM WorkSchedule ws WHERE ws.employee.accountId = ?1 AND ws.workDate = ?2")
     Optional<WorkSchedule> findByEmployeeIdAndWorkDate(String employeeId, LocalDate workDate);
+    
+    @Query("SELECT DISTINCT ws.workDate FROM WorkSchedule ws WHERE ws.workDate BETWEEN ?1 AND ?2 ORDER BY ws.workDate")
+    List<LocalDate> findWorkDatesByDateRange(LocalDate startDate, LocalDate endDate);
+    
+    @Query("SELECT DISTINCT ws.workDate FROM WorkSchedule ws WHERE ws.employee.accountId = ?1 AND ws.workDate BETWEEN ?2 AND ?3 ORDER BY ws.workDate")
+    List<LocalDate> findWorkDatesByEmployeeIdAndDateRange(String employeeId, LocalDate startDate, LocalDate endDate);
 } 

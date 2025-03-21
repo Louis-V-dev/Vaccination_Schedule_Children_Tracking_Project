@@ -109,4 +109,18 @@ public class Payment {
         history.add(historyEntry);
         historyEntry.setPayment(this);
     }
+
+    // Add appointment field
+    @OneToOne(mappedBy = "payment")
+    private Appointment appointment;
+
+    // Add method to get appointment
+    public Appointment getAppointment() {
+        return appointment;
+    }
+
+    // Add method to set appointment
+    public void setAppointment(Appointment appointment) {
+        this.appointment = appointment;
+    }
 } 

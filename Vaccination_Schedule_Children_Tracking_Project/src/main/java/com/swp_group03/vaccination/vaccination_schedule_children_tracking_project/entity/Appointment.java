@@ -1,5 +1,7 @@
 package com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -20,18 +22,22 @@ public class Appointment {
 
     @ManyToOne
     @JoinColumn(name = "child_id", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private Child child;
 
     @ManyToOne
     @JoinColumn(name = "work_schedule_id", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "appointments", "employee", "shift", "sourcePattern"})
     private WorkSchedule workSchedule;
 
     @ManyToOne
     @JoinColumn(name = "doctor_id", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "appointments", "workSchedules", "roles"})
     private Account doctor;
 
     @ManyToOne
     @JoinColumn(name = "nurse_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "appointments", "workSchedules", "roles"})
     private Account nurse;
 
     @Column(nullable = false)
@@ -54,6 +60,7 @@ public class Appointment {
 
     @ManyToOne
     @JoinColumn(name = "payment_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "appointments", "user", "paymentMethod", "recordedBy", "history"})
     private Payment payment;
 
     @Column(name = "created_at")
@@ -64,6 +71,7 @@ public class Appointment {
 
     @Builder.Default
     @OneToMany(mappedBy = "appointment", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonManagedReference
     private List<AppointmentVaccine> appointmentVaccines = new ArrayList<>();
 
     @PrePersist
@@ -79,11 +87,20 @@ public class Appointment {
         updatedAt = LocalDateTime.now();
     }
 
-    public void setStatus(String status) {
-        this.status = AppointmentStatus.valueOf(status);
+    public void setStatus(AppointmentStatus status) {
+        this.status = status;
     }
 
-    public String getStatus() {
-        return status != null ? status.name() : null;
+    public AppointmentStatus getStatus() {
+        return status;
+    }
+
+    // Custom methods for isPaid field
+    public void setPaid(boolean paid) {
+        this.isPaid = paid;
+    }
+    
+    public boolean isPaid() {
+        return this.isPaid;
     }
 } 

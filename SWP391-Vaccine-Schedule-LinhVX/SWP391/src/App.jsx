@@ -19,7 +19,8 @@ import HealthRecordDetail from './pages/HealthRecordDetail';
 import PaymentResult from './pages/PaymentResult';
 import PaymentExample from './pages/PaymentExample';
 import AppointmentCreation from './user/AppointmentCreation';
-
+import PaymentStatus from './user/PaymentStatus';
+import MomoDebug from './components/payment/MomoDebug';
 
 // Create placeholder components for the routes we'll implement later
 const VaccinationHistoryPage = () => <div>Vaccination History page will be implemented soon.</div>;
@@ -40,12 +41,15 @@ function App() {
 			<Route path={"/profile"} element={<ProfilePage />} />
 			<Route path={"/children"} element={<ChildrenManagement />} />
 			<Route path={"/booking"} element={<AppointmentCreation />} />
+			<Route path={"/appointment-creation"} element={<AppointmentCreation />} />
 			<Route path={"/vaccination-history"} element={<VaccinationHistoryPage />} />
 			<Route path={"/service-package"} element={<ServicePackagePage />} />
 			<Route path={"/health-records"} element={<HealthRecord />} />
 			<Route path={"/health-records/:id"} element={<HealthRecordDetail />} />
 			<Route path={"/payment/result"} element={<PaymentResult />} />
 			<Route path={"/payment/example"} element={<PaymentExample />} />
+			<Route path={"/payment/status"} element={<PaymentStatus />} />
+			<Route path={"/payment/debug"} element={<MomoDebug />} />
 
 			{/*Admin page*/}
 			<Route path={"/ManageAccount"} element={<AccountManage />} />

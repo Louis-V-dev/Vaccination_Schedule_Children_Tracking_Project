@@ -5,7 +5,7 @@ import { faQrcode, faMoneyBill, faCreditCard, faUniversity } from '@fortawesome/
 import MomoPaymentService from '../../services/MomoPaymentService';
 import './MomoPayment.css';
 
-const MomoPayment = ({ amount, orderInfo, onSuccess, onFailure, show, onClose }) => {
+const MomoPayment = ({ amount, orderInfo, extraData, onSuccess, onFailure, show, onClose }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [paymentMethod, setPaymentMethod] = useState('captureWallet'); // Default to MoMo wallet
@@ -17,9 +17,10 @@ const MomoPayment = ({ amount, orderInfo, onSuccess, onFailure, show, onClose })
             case 'payWithCC':
                 return <FontAwesomeIcon icon={faCreditCard} />;
             case 'payWithMoMo':
+                return <FontAwesomeIcon icon={faMoneyBill} />;
             case 'captureWallet':
             default:
-                return <FontAwesomeIcon icon={faMoneyBill} />;
+                return <FontAwesomeIcon icon={faQrcode} />;
         }
     };
 
@@ -33,7 +34,7 @@ const MomoPayment = ({ amount, orderInfo, onSuccess, onFailure, show, onClose })
                 return 'MoMo (All Methods)';
             case 'captureWallet':
             default:
-                return 'MoMo Wallet';
+                return 'QR Code';
         }
     };
 
@@ -42,54 +43,78 @@ const MomoPayment = ({ amount, orderInfo, onSuccess, onFailure, show, onClose })
             setLoading(true);
             setError(null);
 
-            // Create payment
+            // Create payment data object with all required MoMo fields
             const paymentData = {
                 amount: amount,
                 orderInfo: orderInfo || "Payment for vaccination services",
-                returnUrl: window.location.origin + "/payment/result",
-                requestType: paymentMethod
+                extraData: extraData, // This should contain the appointmentId
+                returnUrl: window.location.origin + "/payment/status",
+                requestType: paymentMethod,
+                // If this is an appointment payment, include the appointment ID
+                ...(extraData && { appointmentId: extraData })
             };
 
             console.log('Creating MoMo payment with data:', paymentData);
             const response = await MomoPaymentService.createPayment(paymentData);
             console.log('MoMo payment response:', response);
 
-            // Check for successful response - note 0 or 100 can both indicate success
+            // Check for successful response
             if (response && (response.resultCode === 0 || response.resultCode === 100)) {
                 if (response.payUrl) {
-                    // Simply redirect to the MoMo payment page
+                    // Redirect to the MoMo payment page
+                    console.log('Redirecting to MoMo payment URL:', response.payUrl);
                     window.location.href = response.payUrl;
                 } else {
-                    setError("No payment URL received. Please try again.");
+                    // Log more details about the response for debugging
+                    console.error('Missing payUrl in successful response:', response);
+                    
+                    // Check if we have a result object that might contain the payUrl
+                    if (response.result && response.result.payUrl) {
+                        console.log('Found payUrl in result object, redirecting to:', response.result.payUrl);
+                        window.location.href = response.result.payUrl;
+                        return;
+                    }
+                    
+                    setError("No payment URL received. Please try a different payment method or contact support.");
                     if (onFailure) {
-                        onFailure({ resultCode: 99, message: "No payment URL received" });
+                        onFailure({ 
+                            resultCode: 99, 
+                            message: "No payment URL received from MoMo API",
+                            details: JSON.stringify(response)
+                        });
                     }
                 }
             } else {
-                // Handle specific error cases with better messages
-                if (!response) {
-                    setError("Payment service is unavailable. Please try again later.");
-                } else if (response.resultCode === 99) {
-                    setError(`Payment initialization failed: ${response.message}`);
-                } else if (response.message && response.message.toLowerCase() === "success") {
-                    // Don't show "failed: Success" which is confusing 
-                    setError("Payment initialization didn't return required data. Please try again.");
-                } else {
-                    setError(`Payment initialization failed: ${response.message || 'Unknown error'}`);
-                }
+                // Handle error cases
+                const errorMessage = response?.message || 'Failed to initialize payment';
+                const errorCode = response?.resultCode || 99;
                 
-                // Call failure callback with error details
+                console.error('Payment initialization failed:', {
+                    code: errorCode,
+                    message: errorMessage,
+                    response: response
+                });
+                
+                setError(`Payment initialization failed: ${errorMessage} (Code: ${errorCode})`);
+                
                 if (onFailure) {
-                    onFailure(response || { resultCode: 99, message: "Failed to initialize payment" });
+                    onFailure(response || { 
+                        resultCode: errorCode, 
+                        message: errorMessage,
+                        details: JSON.stringify(response)
+                    });
                 }
             }
         } catch (error) {
             console.error("Error creating payment:", error);
             setError(`Error creating payment: ${error.message || 'Unknown error'}`);
             
-            // Call failure callback with error details
             if (onFailure) {
-                onFailure({ resultCode: 99, message: error.message || "Failed to initialize payment" });
+                onFailure({ 
+                    resultCode: 99, 
+                    message: error.message || "Failed to initialize payment",
+                    details: error.stack
+                });
             }
         } finally {
             setLoading(false);
@@ -112,8 +137,12 @@ const MomoPayment = ({ amount, orderInfo, onSuccess, onFailure, show, onClose })
                 )}
 
                 <div className="text-center p-4">
-                    <FontAwesomeIcon icon={faMoneyBill} className="text-success mb-3" size="4x" />
-                    <h4>Ready to Pay?</h4>
+                    <img 
+                        src="https://upload.wikimedia.org/wikipedia/vi/f/fe/MoMo_Logo.png" 
+                        alt="MoMo Logo" 
+                        style={{ height: '60px', marginBottom: '20px' }} 
+                    />
+                    <h4>Payment Methods</h4>
                     <p>Amount: {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount)}</p>
                     <p className="text-muted">{orderInfo || "Payment for vaccination services"}</p>
                     
@@ -121,17 +150,22 @@ const MomoPayment = ({ amount, orderInfo, onSuccess, onFailure, show, onClose })
                         <Form.Group>
                             <Form.Label>Select Payment Method</Form.Label>
                             <div className="payment-method-options">
-                                {['captureWallet', 'payWithATM', 'payWithCC', 'payWithMoMo'].map(method => (
+                                {[
+                                    { id: 'captureWallet', name: 'QR Code' },
+                                    { id: 'payWithATM', name: 'ATM Card' },
+                                    { id: 'payWithCC', name: 'Credit Card' },
+                                    { id: 'payWithMoMo', name: 'All Methods' }
+                                ].map(method => (
                                     <div
-                                        key={method}
-                                        className={`payment-method-option ${paymentMethod === method ? 'selected' : ''}`}
-                                        onClick={() => setPaymentMethod(method)}
+                                        key={method.id}
+                                        className={`payment-method-option ${paymentMethod === method.id ? 'selected' : ''}`}
+                                        onClick={() => setPaymentMethod(method.id)}
                                     >
                                         <div className="icon-container">
-                                            {getPaymentMethodIcon(method)}
+                                            {getPaymentMethodIcon(method.id)}
                                         </div>
                                         <div className="method-name">
-                                            {getPaymentMethodName(method)}
+                                            {method.name}
                                         </div>
                                     </div>
                                 ))}

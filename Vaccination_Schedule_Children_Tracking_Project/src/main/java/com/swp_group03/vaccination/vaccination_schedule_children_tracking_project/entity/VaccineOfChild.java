@@ -1,5 +1,6 @@
 package com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -17,10 +18,12 @@ public class VaccineOfChild {
 
     @ManyToOne
     @JoinColumn(name = "child_id", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "vaccines", "appointments"})
     private Child child;
 
     @ManyToOne
     @JoinColumn(name = "vaccine_id", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private Vaccine vaccine;
 
     @Column(name = "total_doses")
@@ -43,6 +46,7 @@ public class VaccineOfChild {
 
     @ManyToOne
     @JoinColumn(name = "combo_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "vaccineDetails"})
     private VaccineCombo vaccineCombo;
 
     @Column(name = "created_at")

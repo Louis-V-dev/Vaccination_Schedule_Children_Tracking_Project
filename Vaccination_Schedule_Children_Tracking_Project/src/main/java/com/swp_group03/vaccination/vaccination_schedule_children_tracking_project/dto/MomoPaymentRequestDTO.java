@@ -12,9 +12,10 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 public class MomoPaymentRequestDTO {
-    private String orderId; // Optional - will be generated if not provided
+    private Long appointmentId;
     private BigDecimal amount;
     private String orderInfo;
+    private String orderId; // Optional - will be generated if not provided
     private String returnUrl; // URL to redirect after payment
     private String notifyUrl; // IPN URL
     private String extraData; // Additional data in JSON

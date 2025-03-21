@@ -226,12 +226,11 @@ class AppointmentService {
     try {
       // Format data before sending if needed
       const formattedData = {
-        ...appointmentData
-      };
-      
-      // Handle both vaccines array (old format) and vaccineRequests array (new format)
-      if (appointmentData.vaccines) {
-        formattedData.vaccines = appointmentData.vaccines.map(v => {
+        ...appointmentData,
+        // Ensure timeSlot is in the correct format
+        timeSlot: appointmentData.timeSlot,
+        // Ensure each vaccine has all required fields
+        vaccines: appointmentData.vaccines.map(v => {
           switch (v.type) {
             case 'VACCINE_COMBO':
               return {
@@ -252,21 +251,13 @@ class AppointmentService {
                 doseNumber: v.doseNumber || 1
               };
           }
-        });
-      } else if (appointmentData.vaccineRequests) {
-        // Use vaccineRequests directly if that's what was provided
-        formattedData.vaccines = appointmentData.vaccineRequests;
-        
-        // Remove the vaccineRequests property to avoid duplication
-        delete formattedData.vaccineRequests;
-      } else {
-        // Neither vaccines nor vaccineRequests was provided - add empty array
-        formattedData.vaccines = [];
-        console.warn('No vaccines or vaccineRequests provided for appointment');
-      }
+        })
+      };
       
-      // Deep log the final data to help with debugging
+      // Log the formatted data being sent for debugging
       console.log('Appointment data being sent to API:', JSON.stringify(formattedData, null, 2));
+      
+      // Log request headers for debugging
       console.log('Request headers:', getAuthHeaders());
       
       // Set a timeout of 15 seconds for this request
@@ -277,29 +268,26 @@ class AppointmentService {
         validateStatus: function (status) {
           // Allow all status codes to be processed
           return true;
-        }
-      });
-      
-      console.log('Raw response status:', response.status);
-      
-      // Try to parse the response if it's a string
-      if (typeof response.data === 'string') {
-        try {
-          response.data = JSON.parse(response.data);
-        } catch (e) {
-          console.log('Failed to parse JSON response', e);
-          
-          // Try to extract appointment ID from the string
-          const matches = response.data.match(/\"id\":(\d+)/);
-          if (matches && matches[1]) {
-            const extractedId = parseInt(matches[1]);
-            console.log('Extracted ID from unparseable response:', extractedId);
-            response.data = { id: extractedId, _parseError: true };
-          } else {
-            response.data = { _parseError: true, _rawData: response.data };
+        },
+        // Add a transformer to handle bad JSON responses
+        transformResponse: [(data) => {
+          if (typeof data === 'string') {
+            try {
+              return JSON.parse(data);
+            } catch (e) {
+              console.log('Failed to parse JSON response', e);
+              console.log('Original response:', data);
+              // Try to extract appointment ID from the string
+              const matches = data.match(/\"id\":(\d+)/);
+              if (matches && matches[1]) {
+                return { id: parseInt(matches[1]), _parseError: true };
+              }
+              return { _parseError: true, _rawData: data };
+            }
           }
-        }
-      }
+          return data;
+        }]
+      });
       
       console.log('Raw response received:', {
         status: response.status,
@@ -349,22 +337,10 @@ class AppointmentService {
         if (response.data.message) {
           throw new Error(response.data.message);
         }
-        
-        // For Spring Boot detailed error responses
-        if (response.data.error || response.data.errors) {
-          // Try to extract specific validation errors
-          const errors = response.data.errors || [];
-          if (errors.length > 0) {
-            const errorMessages = errors.map(err => `${err.field}: ${err.defaultMessage || err.message}`).join(', ');
-            throw new Error(`Validation errors: ${errorMessages}`);
-          } else if (response.data.error) {
-            throw new Error(response.data.error);
-          }
-        }
       }
       
       // If we reached here, we have an error response with no useful information
-      throw new Error(`Request failed with status code ${response.status}: ${response.statusText || 'Unknown error'}`);
+      throw new Error(`Request failed with status code ${response.status}`);
     } catch (error) {
       console.error('Error creating appointment:', error);
       
@@ -378,18 +354,72 @@ class AppointmentService {
         });
       }
       
-      // Add response details if available
-      if (error.response) {
-        console.log('Error response:', {
-          status: error.response.status,
-          statusText: error.response.statusText,
-          data: error.response.data
-        });
-        
-        // Extract backend error message if available
-        if (error.response.data && error.response.data.message) {
-          throw new Error(error.response.data.message);
+      // Check for appointment ID in error response headers
+      if (error.response && error.response.headers && error.response.headers.location) {
+        const locationHeader = error.response.headers.location;
+        const matches = locationHeader.match(/\/appointments\/(\d+)/);
+        if (matches && matches[1]) {
+          const appointmentId = parseInt(matches[1]);
+          console.log('Recovered appointment ID from error response headers:', appointmentId);
+          return { id: appointmentId, recovered: true };
         }
+      }
+      
+      // If this is an expected JSON serialization error but the appointment was created,
+      // try to extract information from the error message or URL
+      if (error.message && (
+          error.message.includes('JSON') || 
+          error.message.includes('parse') || 
+          error.message.includes('unexpected token') ||
+          error.message.includes('recursion') ||
+          error.message.includes('circular'))) {
+        
+        console.log('Possible JSON serialization error. The appointment might still have been created.');
+        
+        // Try to extract appointment ID from the request URL
+        if (error.config && error.config.url) {
+          const matches = error.config.url.match(/\/appointments\/(\d+)/);
+          if (matches && matches[1]) {
+            const appointmentId = parseInt(matches[1]);
+            console.log('Extracted appointment ID from URL:', appointmentId);
+            return { id: appointmentId, recovered: true };
+          }
+        }
+        
+        // The real solution is to fix the backend, but this helps in the meantime
+        return {
+          id: null,
+          error: 'JSON_SERIALIZATION_ERROR',
+          message: 'Appointment might have been created but response could not be parsed'
+        };
+      }
+      
+      // Add more detailed error information
+      if (error.response) {
+        console.error('Error status:', error.response.status);
+        console.error('Error data:', error.response.data);
+        
+        // Format and log the full error details for easier debugging
+        const errorInfo = {
+          status: error.response.status,
+          message: error.response.data?.message || 'Uncategorized exception',
+          data: error.response.data,
+          request: {
+            url: error.response.config.url,
+            method: error.response.config.method,
+            headers: error.response.config.headers,
+            data: JSON.parse(error.response.config.data || '{}')
+          },
+          possibleIssues: [
+            'Missing required fields',
+            'Invalid data format',
+            'Data validation failure',
+            'Authorization issues',
+            'Backend service unavailable'
+          ]
+        };
+        
+        console.error('API Error Details:', JSON.stringify(errorInfo, null, 2));
       }
       
       throw error;
@@ -397,75 +427,22 @@ class AppointmentService {
   }
 
   // Create online payment for an appointment
-  async createPayment(appointmentId, paymentOptions = {}) {
+  async createPayment(appointmentId) {
     try {
-      console.log('Creating payment for appointment:', appointmentId, 'with options:', paymentOptions);
+      console.log('Creating payment for appointment:', appointmentId);
       
-      // Format the payment request according to MomoPaymentRequestDTO structure
+      // Add more data for debugging
       const paymentRequest = {
         appointmentId: appointmentId,
-        amount: paymentOptions.amount,
-        requestType: paymentOptions.requestType || 'captureWallet',
-        orderInfo: paymentOptions.orderInfo || `Payment for appointment #${appointmentId}`,
-        extraData: appointmentId.toString(),
-        returnUrl: paymentOptions.redirectUrl || window.location.origin + '/appointment-creation',
-        notifyUrl: paymentOptions.notifyUrl || window.location.origin + '/api/payments/momo/ipn',
-        cancelUrl: paymentOptions.cancelUrl || window.location.origin + '/appointment-creation?paymentStatus=cancelled&appointmentId=' + appointmentId,
-        failureUrl: paymentOptions.failureUrl || window.location.origin + '/appointment-creation?paymentStatus=failed&appointmentId=' + appointmentId
+        extraData: appointmentId.toString() // Add this to ensure we can track the appointment
       };
       
-      console.log('Payment request data:', paymentRequest);
-      
-      const response = await axios.post(`${API_URL}/payments/momo/create`, paymentRequest, {
+      const response = await axios.post(`${API_URL}/payments/create/${appointmentId}`, paymentRequest, {
         headers: getAuthHeaders()
       });
       
       console.log('Payment created successfully:', response.data);
-      
-      // Store appointment ID in sessionStorage for retrieval after redirect
-      sessionStorage.setItem('pendingPayment', JSON.stringify({
-        appointmentId: appointmentId,
-        paymentMethod: paymentRequest.requestType,
-        amount: paymentOptions.amount,
-        timestamp: Date.now()
-      }));
-      
-      // Standardize the payment response
-      const paymentData = response.data.result || response.data;
-      
-      // MOMO payment URL should be in payUrl field
-      const paymentUrl = paymentData && (paymentData.payUrl || paymentData.paymentUrl);
-      
-      if (paymentUrl) {
-        console.log('Using payment URL:', paymentUrl);
-        return {
-          ...paymentData,
-          payUrl: paymentUrl,
-          paymentMethod: paymentRequest.requestType,
-          orderId: paymentData.orderId || paymentData.requestId
-        };
-      }
-      
-      // If we couldn't find a payUrl but the response data is a URL string
-      if (typeof paymentData === 'string' && (
-        paymentData.startsWith('http') || 
-        paymentData.includes('gateway') ||
-        paymentData.includes('momo')
-      )) {
-        console.log('Payment URL received as string:', paymentData);
-        return { 
-          payUrl: paymentData,
-          paymentMethod: paymentRequest.requestType,
-          orderId: `order-${appointmentId}-${Date.now()}`
-        };
-      }
-      
-      // Return original response with payment method added
-      return {
-        ...paymentData,
-        paymentMethod: paymentRequest.requestType,
-        orderId: paymentData.orderId || paymentData.requestId || `order-${appointmentId}-${Date.now()}`
-      };
+      return response.data;
     } catch (error) {
       console.error('Error creating payment:', error);
       
@@ -481,7 +458,6 @@ class AppointmentService {
       
       throw error;
     }
-  }
 
   // Get user's appointments
   async getUserAppointments() {
@@ -493,27 +469,6 @@ class AppointmentService {
     } catch (error) {
       console.error('Error fetching user appointments:', error);
       throw error;
-    }
-  }
-
-  // Utility method to get the ID of the last created appointment (fallback for error handling)
-  async getLastCreatedAppointmentId() {
-    try {
-      // First try to get user's appointments and find the most recent one
-      const appointments = await this.getUserAppointments();
-      
-      if (appointments && appointments.length > 0) {
-        // Sort by creation date descending
-        appointments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        // Return the ID of the most recent appointment
-        return appointments[0].id;
-      }
-      
-      // If no appointments found or error occurs, return null
-      return null;
-    } catch (error) {
-      console.error('Error getting last created appointment ID:', error);
-      return null;
     }
   }
 
@@ -533,38 +488,13 @@ class AppointmentService {
   // Get appointment details by ID
   async getAppointmentById(appointmentId) {
     try {
-      console.log('Fetching appointment details for ID:', appointmentId);
       const response = await axios.get(`${API_URL}/appointments/${appointmentId}`, {
-        headers: getAuthHeaders(),
-        // Add validateStatus to handle any status code
-        validateStatus: function (status) {
-          // Allow all status codes to be processed
-          return true;
-        }
+        headers: getAuthHeaders()
       });
-      
-      // Handle non-200 responses
-      if (response.status >= 400) {
-        console.warn(`Appointment fetch failed with status ${response.status}:`, response.data);
-        // Return a placeholder object instead of throwing
-        return { 
-          id: appointmentId,
-          error: true,
-          message: response.data?.message || `Failed to fetch appointment (Status: ${response.status})`,
-          _statusCode: response.status
-        };
-      }
-      
       return response.data;
     } catch (error) {
       console.error('Error fetching appointment details:', error);
-      // Return a placeholder object instead of throwing
-      return {
-        id: appointmentId,
-        error: true,
-        message: error.message || 'Failed to fetch appointment details',
-        _error: error
-      };
+      throw error;
     }
   }
 
@@ -777,96 +707,57 @@ class AppointmentService {
     return fallbackDates;
   }
 
-  // Check payment status by order ID
+  // Check payment status 
   async checkPaymentStatus(orderId) {
     try {
       console.log('Checking payment status for order:', orderId);
       const response = await axios.get(`${API_URL}/payments/momo/status?orderId=${orderId}`, {
         headers: getAuthHeaders()
       });
+      
       console.log('Payment status response:', response.data);
       return response.data;
     } catch (error) {
       console.error('Error checking payment status:', error);
+      
+      // Log detailed error for debugging
+      if (error.response) {
+        const errorInfo = {
+          status: error.response.status,
+          data: error.response.data,
+          url: error.response.config.url
+        };
+        console.error('Payment status API error details:', errorInfo);
+      }
+      
       throw error;
     }
   }
   
-  // Mark appointment as paid (for when payment is confirmed)
+  // Mark appointment as paid (used after payment confirmation)
   async markAppointmentAsPaid(appointmentId) {
     try {
       console.log('Marking appointment as paid:', appointmentId);
-      
-      // First check if the appointment exists
-      const appointment = await this.getAppointmentById(appointmentId);
-      
-      // If the appointment fetch had an error, we'll still try to mark as paid
-      // but log a warning
-      if (appointment.error) {
-        console.warn('Attempting to mark appointment as paid despite fetch error:', appointment.message);
-      }
-      
-      const response = await axios.put(`${API_URL}/appointments/${appointmentId}/paid`, {}, {
-        headers: getAuthHeaders(),
-        // Add validateStatus to handle any status code
-        validateStatus: function (status) {
-          // Allow all status codes to be processed
-          return true;
-        }
+      const response = await axios.post(`${API_URL}/appointments/${appointmentId}/mark-paid`, {}, {
+        headers: getAuthHeaders()
       });
       
-      // Handle non-200 responses
-      if (response.status >= 400) {
-        console.warn(`Mark as paid failed with status ${response.status}:`, response.data);
-        
-        // This is an IPN fallback - if the IPN fails, we create a fallback record
-        // Try an alternative endpoint if the first one fails
-        try {
-          console.log('Trying alternative payment recording method...');
-          
-          // Create a record in the payment table even if appointment update fails
-          const fallbackResponse = await axios.post(`${API_URL}/payments/record`, {
-            appointmentId,
-            amount: 0, // We don't know the amount, but this marks it as paid
-            method: 'MOMO',
-            status: 'COMPLETED',
-            reference: `manual-${appointmentId}-${Date.now()}`
-          }, {
-            headers: getAuthHeaders()
-          });
-          
-          console.log('Alternative payment recording result:', fallbackResponse.data);
-          return {
-            success: true,
-            message: 'Payment recorded via alternative method',
-            data: fallbackResponse.data
-          };
-        } catch (fallbackError) {
-          console.error('Alternative payment recording also failed:', fallbackError);
-          // Return a result object instead of throwing
-          return { 
-            success: false,
-            message: response.data?.message || `Failed to mark as paid (Status: ${response.status})`,
-            _statusCode: response.status
-          };
-        }
-      }
-      
-      // If we got here, the API call was successful
-      console.log('Appointment payment marked successfully:', response.data);
-      return {
-        success: true,
-        message: 'Appointment marked as paid successfully',
-        data: response.data
-      };
+      console.log('Appointment marked as paid:', response.data);
+      return response.data;
     } catch (error) {
       console.error('Error marking appointment as paid:', error);
-      // Return a result object instead of throwing
-      return {
-        success: false,
-        message: error.message || 'Failed to mark appointment as paid',
-        _error: error
-      };
+      
+      // Log detailed error for debugging
+      if (error.response) {
+        const errorInfo = {
+          status: error.response.status,
+          data: error.response.data,
+          url: error.response.config.url
+        };
+        console.error('Mark as paid API error details:', errorInfo);
+      }
+      
+      throw error;
     }
   }
 }

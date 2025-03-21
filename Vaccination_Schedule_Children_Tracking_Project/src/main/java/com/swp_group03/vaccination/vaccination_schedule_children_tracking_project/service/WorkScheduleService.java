@@ -189,4 +189,26 @@ public class WorkScheduleService {
         LocalDate today = LocalDate.now();
         return schedule.getWorkDate().isAfter(today.plusDays(6));
     }
+
+    public List<WorkSchedule> getDoctorSchedulesByDateRange(LocalDate startDate, LocalDate endDate) {
+        List<WorkSchedule> allSchedules = workScheduleRepository.findByWorkDateBetween(startDate, endDate);
+        return allSchedules.stream()
+            .filter(schedule -> schedule.getEmployee().getRoles().stream()
+                .anyMatch(role -> role.getRole_Name().equals("DOCTOR")))
+            .collect(Collectors.toList());
+    }
+
+    public List<WorkSchedule> getDoctorSchedulesByDateRange(String doctorId, LocalDate startDate, LocalDate endDate) {
+        Account doctor = userRepo.findById(doctorId)
+            .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        // Verify the account is a doctor
+        boolean isDoctor = doctor.getRoles().stream()
+            .anyMatch(role -> role.getRole_Name().equals("DOCTOR"));
+        if (!isDoctor) {
+            throw new AppException(ErrorCode.INVALID_ROLE, "Account is not a doctor");
+        }
+
+        return workScheduleRepository.findByEmployeeAccountIdAndWorkDateBetween(doctorId, startDate, endDate);
+    }
 } 

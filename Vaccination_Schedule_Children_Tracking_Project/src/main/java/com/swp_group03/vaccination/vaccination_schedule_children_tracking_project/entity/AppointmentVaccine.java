@@ -1,5 +1,7 @@
 package com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.entity;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -18,14 +20,27 @@ public class AppointmentVaccine {
 
     @ManyToOne
     @JoinColumn(name = "appointment_id", nullable = false)
+    @JsonBackReference
     private Appointment appointment;
 
     @ManyToOne
-    @JoinColumn(name = "vaccine_of_child_id", nullable = false)
+    @JoinColumn(name = "vaccine_of_child_id", nullable = true)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "appointmentVaccines"})
     private VaccineOfChild vaccineOfChild;
 
     @ManyToOne
+    @JoinColumn(name = "vaccine_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    private Vaccine vaccine;
+
+    @ManyToOne
+    @JoinColumn(name = "vaccine_combo_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    private VaccineCombo vaccineCombo;
+
+    @ManyToOne
     @JoinColumn(name = "dose_schedule_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "appointmentVaccines"})
     private DoseSchedule doseSchedule;
 
     @Column(nullable = false)
@@ -34,6 +49,9 @@ public class AppointmentVaccine {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private VaccinationStatus status;
+
+    @Column(name = "from_combo")
+    private Boolean fromCombo;
 
     @Column(name = "notes")
     private String notes;
@@ -49,6 +67,7 @@ public class AppointmentVaccine {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
         if (status == null) status = VaccinationStatus.PENDING;
+        if (fromCombo == null) fromCombo = false;
     }
 
     @PreUpdate

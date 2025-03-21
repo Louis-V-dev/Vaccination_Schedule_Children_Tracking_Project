@@ -10,7 +10,7 @@ import java.util.List;
 
 @Entity
 @Table(name = "Child")
-@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "vaccinesOfChild", "appointments"})
 public class Child{
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

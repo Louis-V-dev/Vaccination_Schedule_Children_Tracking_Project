@@ -144,4 +144,14 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             LocalDateTime expirationDate,
             Pageable pageable
     );
+
+    List<Payment> findByUser_AccountId(String userId);
+    
+    // Find the most recent payment containing this order info
+
+    Payment findFirstByTransactionIdContainingOrderByCreatedAtDesc(String orderId);
+    
+    List<Payment> findByStatusAndTransactionIdContainingOrderByCreatedAtDesc(PaymentStatus status, String transactionIdPattern);
+
+    Payment findFirstByTransactionIdContainingAndStatusOrderByCreatedAtDesc(String transactionIdPattern, PaymentStatus status);
 } 

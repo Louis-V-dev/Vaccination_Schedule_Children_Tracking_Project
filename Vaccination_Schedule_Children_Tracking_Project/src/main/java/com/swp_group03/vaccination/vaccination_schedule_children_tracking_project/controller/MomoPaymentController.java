@@ -6,6 +6,7 @@ import com.swp_group03.vaccination.vaccination_schedule_children_tracking_projec
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.dto.MomoPaymentRequestDTO;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.dto.MomoPaymentResponseDTO;
 import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.service.MomoPaymentService;
+import com.swp_group03.vaccination.vaccination_schedule_children_tracking_project.service.AppointmentService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +21,9 @@ public class MomoPaymentController {
 
     @Autowired
     private MomoPaymentService momoPaymentService;
+
+    @Autowired
+    private AppointmentService appointmentService;
 
     @PostMapping("/create")
     public ResponseEntity<ApiResponse<MomoPaymentResponseDTO>> createPayment(@RequestBody MomoPaymentRequestDTO request) {
@@ -73,6 +77,26 @@ public class MomoPaymentController {
                     // This helps the frontend handle the error better
                     return ResponseEntity.ok(ApiResponse.error(resultCode, errorMessage));
                 }
+                
+                // Check if payment is successful
+                if (resultCode == 0) {
+                    // Extract appointmentId from extraData if available
+                    String extraData = (String) status.get("extraData");
+                    if (extraData != null && !extraData.isEmpty()) {
+                        try {
+                            // Assuming extraData contains appointmentId
+                            Long appointmentId = Long.parseLong(extraData);
+                            
+                            // Process pending vaccine requests
+                            appointmentService.processVaccinesAfterPayment(appointmentId);
+                            
+                            System.out.println("MomoPaymentController: Processed vaccine requests for appointment: " + appointmentId);
+                        } catch (Exception e) {
+                            System.err.println("MomoPaymentController: Error processing appointment after payment: " + e.getMessage());
+                            // Continue with payment status check even if processing appointment fails
+                        }
+                    }
+                }
             }
             
             return ResponseEntity.ok(ApiResponse.success(status));
@@ -92,7 +116,42 @@ public class MomoPaymentController {
         try {
             Map<String, Object> requestMap = new ObjectMapper().readValue(requestBody, 
                 new TypeReference<Map<String, Object>>() {});
+                
+            // Process IPN callback
             momoPaymentService.processIpnCallback(requestMap);
+            
+            // Check if payment is successful
+            Object resultCodeObj = requestMap.get("resultCode");
+            int resultCode = -1;
+            
+            if (resultCodeObj instanceof Integer) {
+                resultCode = (Integer) resultCodeObj;
+            } else if (resultCodeObj instanceof String) {
+                try {
+                    resultCode = Integer.parseInt((String) resultCodeObj);
+                } catch (NumberFormatException e) {
+                    System.err.println("MomoPaymentController: Invalid resultCode format in IPN: " + resultCodeObj);
+                }
+            }
+            
+            if (resultCode == 0) {
+                // Payment successful
+                String extraData = (String) requestMap.get("extraData");
+                if (extraData != null && !extraData.isEmpty()) {
+                    try {
+                        // Assuming extraData contains appointmentId
+                        Long appointmentId = Long.parseLong(extraData);
+                        
+                        // Process pending vaccine requests
+                        appointmentService.processVaccinesAfterPayment(appointmentId);
+                        
+                        System.out.println("MomoPaymentController: IPN processed vaccine requests for appointment: " + appointmentId);
+                    } catch (Exception e) {
+                        System.err.println("MomoPaymentController: Error processing appointment in IPN: " + e.getMessage());
+                    }
+                }
+            }
+            
             return ResponseEntity.ok("{\"status\":\"ok\"}");
         } catch (Exception e) {
             System.err.println("Error processing IPN callback: " + e.getMessage());

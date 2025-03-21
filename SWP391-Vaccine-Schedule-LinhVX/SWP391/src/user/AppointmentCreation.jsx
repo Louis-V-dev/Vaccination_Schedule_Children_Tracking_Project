@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Container, Card, Button, Form, Row, Col, ProgressBar, Alert, Badge, Spinner, ListGroup } from 'react-bootstrap';
+import { Container, Card, Button, Form, Row, Col, ProgressBar, Alert, Badge, Spinner, ListGroup, Toast } from 'react-bootstrap';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCalendarPlus, faSpinner, faCheck, faSyringe, faClock, faUser, faCalendarAlt, faMoneyBill } from '@fortawesome/free-solid-svg-icons';
-import { Link } from 'react-router-dom';
+import { faCalendarPlus, faSpinner, faCheck, faSyringe, faClock, faUser, faCalendarAlt, faMoneyBill, faHome, faArrowLeft, faArrowRight, faFemale, faMale, faChild, faExclamationTriangle, faCheckCircle, faInfoCircle, faCreditCard } from '@fortawesome/free-solid-svg-icons';
+import { Link, useNavigate } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import appointmentService from '../services/appointmentService';
 import childService from '../services/ChildService';
@@ -12,10 +12,134 @@ import { jwtDecode } from 'jwt-decode';
 import { format, addDays } from 'date-fns';
 import '../assets/css/appointment.css';
 import Calendar from 'react-calendar';
+import MomoPayment from '../components/payment/MomoPayment';
+import PaymentModal from '../components/PaymentModal';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
+// Add this helper function to check and format vaccine data
+const ensureValidVaccineData = (data = {}) => {
+    const { availableVaccines = [], existingVaccines = [], upcomingDoses = [], vaccineCombos = [] } = data;
+    
+    // Add detailed logging for each upcomingDose to check structure
+    console.log("Processing upcoming doses:", upcomingDoses);
+    
+    // Check for duplicates by ID and remove them
+    const doseMap = new Map();
+    const uniqueDoses = [];
+    
+    upcomingDoses.forEach(dose => {
+        // If this ID already exists, log a warning
+        if (doseMap.has(dose.id)) {
+            console.warn(`Found duplicate dose with ID ${dose.id}, keeping the first instance.`);
+        } else {
+            doseMap.set(dose.id, true);
+            uniqueDoses.push(dose);
+        }
+    });
+    
+    if (upcomingDoses.length !== uniqueDoses.length) {
+        console.warn(`Removed ${upcomingDoses.length - uniqueDoses.length} duplicate doses.`);
+    }
+    
+    // Process and validate each upcoming dose
+    const processedUpcomingDoses = uniqueDoses.map((dose, index) => {
+        console.log(`Processing dose ${index}:`, dose);
+        
+        // Make a deep copy to avoid modifying the original
+        const processedDose = JSON.parse(JSON.stringify(dose));
+        
+        // IMPORTANT: Log the exact structure we're working with
+        console.log(`Dose ${index} before processing:`, {
+            id: processedDose.id,
+            doseNumber: processedDose.doseNumber,
+            vaccineName: processedDose.vaccineName,
+            price: processedDose.price,
+            totalDoses: processedDose.totalDoses,
+            isPaid: processedDose.isPaid,
+            scheduledDate: processedDose.scheduledDate
+        });
+        
+        // Make sure id is available
+        if (!processedDose.id) {
+            console.warn(`Dose ${index} missing ID, generating temporary ID`);
+            processedDose.id = `temp-${index}`;
+        }
+        
+        // Ensure vaccineOfChild exists
+        if (!processedDose.vaccineOfChild) {
+            console.warn(`Dose ${index} missing vaccineOfChild, creating fallback`);
+            processedDose.vaccineOfChild = {
+                id: processedDose.vaccineOfChildId || index,
+                totalDoses: processedDose.totalDoses || 4,
+                currentDose: processedDose.currentDose || processedDose.doseNumber - 1 || 0
+            };
+        }
+        
+        // Ensure vaccine info exists in the processed dose
+        // CRITICAL: Preserve direct fields from API rather than overriding them
+        if (!processedDose.vaccineName) {
+            processedDose.vaccineName = processedDose.vaccineOfChild?.vaccine?.name || "Unknown Vaccine";
+        }
+        
+        if (!processedDose.vaccineDescription) {
+            processedDose.vaccineDescription = processedDose.vaccineOfChild?.vaccine?.description || "No description available";
+        }
+        
+        if (!processedDose.vaccineManufacturer) {
+            processedDose.vaccineManufacturer = processedDose.vaccineOfChild?.vaccine?.manufacturer || "Unknown manufacturer";
+        }
+        
+        if (!processedDose.price) {
+            processedDose.price = processedDose.vaccineOfChild?.vaccine?.price || 0;
+        }
+        
+        if (!processedDose.totalDoses) {
+            processedDose.totalDoses = processedDose.vaccineOfChild?.totalDoses || 4;
+        }
+        
+        // Ensure vaccine exists in vaccineOfChild
+        if (!processedDose.vaccineOfChild.vaccine) {
+            console.warn(`Dose ${index} missing vaccine in vaccineOfChild, creating fallback`);
+            processedDose.vaccineOfChild.vaccine = {
+                name: processedDose.vaccineName || "Unknown Vaccine",
+                price: processedDose.price || 0,
+                manufacturer: processedDose.vaccineManufacturer || "Unknown manufacturer",
+                description: processedDose.vaccineDescription || "No description available"
+            };
+        }
+        
+        // Convert string isPaid to boolean if needed
+        if (typeof processedDose.isPaid === 'string') {
+            processedDose.isPaid = processedDose.isPaid.toLowerCase() === 'true';
+        }
+        
+        // IMPORTANT: Log the processed version to verify
+        console.log(`Dose ${index} after processing:`, {
+            id: processedDose.id,
+            doseNumber: processedDose.doseNumber,
+            vaccineName: processedDose.vaccineName,
+            price: processedDose.price,
+            totalDoses: processedDose.totalDoses,
+            isPaid: processedDose.isPaid,
+            scheduledDate: processedDose.scheduledDate
+        });
+        
+        return processedDose;
+    });
+    
+    return {
+        availableVaccines,
+        existingVaccines,
+        upcomingDoses: processedUpcomingDoses,
+        vaccineCombos
+    };
+};
 
 const AppointmentCreation = () => {
     // Track the current step in appointment creation process
     const [currentStep, setCurrentStep] = useState(1);
+    const navigate = useNavigate();
     
     // Step 1: Child and Vaccine Selection
     const [children, setChildren] = useState([]);
@@ -40,6 +164,10 @@ const AppointmentCreation = () => {
     const [notes, setNotes] = useState('');
     const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
     
+    // Available dates for date-first mode
+    const [availableDates, setAvailableDates] = useState([]);
+    const [isLoadingDates, setIsLoadingDates] = useState(false);
+    
     // Step 3: Payment Selection
     const [paymentMethod, setPaymentMethod] = useState('');
     const [invoice, setInvoice] = useState(null);
@@ -48,6 +176,7 @@ const AppointmentCreation = () => {
     // Error and success handling
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [isSuccess, setIsSuccess] = useState(false); // Add missing state variable for success status
     
     // Step 4: Confirmation
     const [appointmentResult, setAppointmentResult] = useState(null);
@@ -69,6 +198,16 @@ const AppointmentCreation = () => {
     // Fetch available doctors for a specific time slot (date-first mode)
     const [availableDoctorsForTimeSlot, setAvailableDoctorsForTimeSlot] = useState([]);
     const [doctorWarning, setDoctorWarning] = useState('');
+    
+    // Payment modal state
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [createdAppointmentId, setCreatedAppointmentId] = useState(null);
+    
+    // New payment-related state variables
+    const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+    const [paymentProcessing, setPaymentProcessing] = useState(false);
+    const [paymentResult, setPaymentResult] = useState(null);
+    const [paymentError, setPaymentError] = useState(null);
     
     // Calculate age from date of birth
     const calculateAge = (birthdate) => {
@@ -105,25 +244,46 @@ const AppointmentCreation = () => {
         fetchChildren();
     }, []);
     
-    // Load child vaccine data when child is selected
-    useEffect(() => {
+    // Update the fetchChildVaccineData function
         const fetchChildVaccineData = async () => {
-            if (!selectedChild || !appointmentType || currentStep !== 1) return;
+        if (!selectedChild) {
+            console.warn('No child selected, cannot fetch vaccine data');
+            return;
+        }
+        
+        if (!appointmentType) {
+            console.warn('No appointment type selected, cannot fetch vaccine data');
+            return;
+        }
             
             setIsLoadingVaccineData(true);
+        setError('');
+        
             try {
+            console.log(`Fetching vaccine data for child ${selectedChild} and type ${appointmentType}`);
+            
+            // Call the API
                 const response = await appointmentService.getChildVaccineData(selectedChild, appointmentType);
-                setChildVaccineData(response);
+            
+            // Log raw response data for debugging
+            console.log('Raw API response:', response);
+            
+            // Process and validate the data
+            const processedData = ensureValidVaccineData(response);
+            console.log('Processed vaccine data:', processedData);
+            
+            // Update state with processed data
+            setChildVaccineData(processedData);
+            
+            // Clear any selected vaccines when getting new data
+            setSelectedVaccines([]);
             } catch (error) {
-                setError('Failed to load vaccine data. Please try again.');
-                console.error('Error loading child vaccine data:', error);
+            console.error('Error fetching child vaccine data:', error);
+            setError(`Failed to load vaccine data: ${error.message}`);
             } finally {
                 setIsLoadingVaccineData(false);
             }
         };
-        
-        fetchChildVaccineData();
-    }, [selectedChild, appointmentType, currentStep]);
     
     // Load available slots based on selected date or doctor
     const fetchAvailableSlots = async () => {
@@ -178,7 +338,14 @@ const AppointmentCreation = () => {
     // Calculate provisional invoice
     const calculateInvoice = () => {
         const totalAmount = selectedVaccines.reduce((sum, vaccine) => {
+            // For vaccine combos, use the combo price
+            if (vaccine.type === 'VACCINE_COMBO') {
             return sum + (vaccine.isPaid ? 0 : vaccine.price);
+            }
+            
+            // For individual vaccines and next doses
+            const price = vaccine.price || (vaccine.vaccine && vaccine.vaccine.price) || 0;
+            return sum + (vaccine.isPaid ? 0 : price);
         }, 0);
         
         const paidVaccines = selectedVaccines.filter(v => v.isPaid);
@@ -189,87 +356,349 @@ const AppointmentCreation = () => {
             paidVaccines,
             unpaidVaccines
         });
+        
+        // Update isPrePaid flag if all selected vaccines are paid
+        setIsPrePaid(selectedVaccines.length > 0 && selectedVaccines.every(v => v.isPaid));
     };
     
     // Handle appointment creation
     const handleCreateAppointment = async () => {
+            setIsCreatingAppointment(true);
+            setError(null);
+
         try {
-            const appointmentData = {
-                childId: selectedChild,
-                isDayPriority,
+            // Log the raw data before formatting
+            console.log('Raw data before formatting:', {
+                selectedChild,
+                selectedDate,
+                selectedTimeSlot,
+                selectedDoctor,
+                selectedVaccines
+            });
+            
+            // Ensure we have valid IDs
+            if (!selectedChild) {
+                throw new Error('Child ID is required');
+            }
+            
+            if (!selectedDoctor) {
+                throw new Error('Doctor ID is required');
+            }
+            
+            // Format vaccine requests - with additional validation
+            const formattedVaccines = selectedVaccines.map(v => {
+                // Skip any vaccines without proper type
+                if (!v.type) {
+                    console.warn('Skipping vaccine without type:', v);
+                    return null;
+                }
+                
+                let baseRequest = { type: v.type };
+                
+                switch (v.type) {
+                    case 'NEW_VACCINE':
+                        if (!v.vaccineId || v.vaccineId === 'undefined') {
+                            console.warn('Invalid vaccineId for NEW_VACCINE:', v);
+                            return null;
+                        }
+                        baseRequest = {
+                            ...baseRequest,
+                            vaccineId: v.vaccineId?.toString(),
+                            doseNumber: v.doseNumber || 1
+                        };
+                        break;
+                        
+                    case 'NEXT_DOSE':
+                        if (!v.vaccineOfChildId || !v.doseScheduleId || 
+                            v.vaccineOfChildId === 'undefined' || v.doseScheduleId === 'undefined') {
+                            console.warn('Invalid IDs for NEXT_DOSE:', v);
+                            return null;
+                        }
+                        baseRequest = {
+                            ...baseRequest,
+                            vaccineOfChildId: v.vaccineOfChildId?.toString(),
+                            doseScheduleId: v.doseScheduleId?.toString(),
+                            doseNumber: v.doseNumber || 1
+                        };
+                        break;
+                        
+                    case 'VACCINE_COMBO':
+                        if (!v.comboId || v.comboId === 'undefined') {
+                            console.warn('Invalid comboId for VACCINE_COMBO:', v);
+                            return null;
+                        }
+                        baseRequest = {
+                            ...baseRequest,
+                            comboId: v.comboId?.toString()
+                        };
+                        break;
+                        
+                    default:
+                        console.warn('Unknown vaccine type:', v.type);
+                        return null;
+                }
+                
+                return baseRequest;
+            }).filter(v => v !== null); // Remove any null entries
+            
+            // Ensure we have at least one valid vaccine
+            if (formattedVaccines.length === 0) {
+                throw new Error('At least one valid vaccine is required');
+            }
+            
+            // Create request data with string IDs
+            const requestData = {
+                childId: selectedChild, // Use string ID directly
+                doctorId: selectedDoctor, // Use string ID directly
+                isDayPriority: isDayPriority === true,
                 appointmentDate: selectedDate,
                 timeSlot: selectedTimeSlot,
-                doctorId: selectedDoctor,
-                vaccines: selectedVaccines.map(v => ({
-                    vaccineId: v.vaccineId,
-                    vaccineOfChildId: v.vaccineOfChildId,
-                    doseScheduleId: v.doseScheduleId,
-                    doseNumber: v.doseNumber
-                })),
-                paymentMethod,
-                notes
+                vaccines: formattedVaccines,
+                paymentMethod: paymentMethod || 'ONLINE',
+                notes: notes || ''
             };
             
-            const response = await appointmentService.createAppointment(appointmentData);
+            // Log the formatted request data
+            console.log('Formatted appointment request data:', requestData);
             
-            if (response && response.appointmentId) {
-                if (paymentMethod === 'ONLINE') {
-                    // Redirect to payment page
-                    const paymentResponse = await appointmentService.createPayment(response.appointmentId);
-                    if (paymentResponse && paymentResponse.paymentUrl) {
-                        window.location.href = paymentResponse.paymentUrl;
-                    }
-                    } else {
-                    setSuccess('Appointment created successfully!');
-                    // Reset form or redirect to confirmation page
-                }
+            // Create the appointment
+            const appointment = await appointmentService.createAppointment(requestData);
+            
+            console.log('Appointment created successfully:', appointment);
+            
+            // Check if the response indicates an error
+            if (appointment.code === 5000) {
+                throw new Error(appointment.message || 'Failed to create appointment');
             }
-        } catch (error) {
-            setError('Failed to create appointment. Please try again.');
-            console.error('Error creating appointment:', error);
+            
+            // Store the appointment ID
+            setCreatedAppointmentId(appointment.id);
+            
+            // Update state with success
+            setAppointmentResult({
+                id: appointment.id,
+                status: 'SUCCESS',
+                message: 'Appointment created successfully'
+            });
+
+            // For online payment, open the payment modal
+            if (paymentMethod === 'ONLINE') {
+                // Get the invoice total
+                const invoiceTotal = calculateInvoiceTotal();
+                
+                // Open the payment modal
+                setPaymentModalOpen(true);
+            } else {
+                // For offline payment, show success message
+                setCurrentStep(4);
+                setSuccess("Appointment created successfully! You will need to pay at the clinic.");
+                setIsSuccess(true);
+            }
+        } catch (err) {
+            console.error('Error creating appointment:', err);
+            setError(err.message || 'Failed to create appointment. Please try again.');
+        } finally {
+            setIsCreatingAppointment(false);
         }
     };
     
+    // Handle payment modal close
+    const handlePaymentModalClose = () => {
+        setPaymentModalOpen(false);
+        // Don't automatically advance to step 4 when user cancels payment
+        // Let them have a chance to choose payment method again
+        // The appointment is already created, so we leave them at step 3 with a notice
+        setError("Payment cancelled. You can try again or change to offline payment.");
+    };
+
+    // Handle payment success
+    const handlePaymentSuccess = (result) => {
+        console.log('Payment successful:', result);
+        setPaymentResult(result);
+        setPaymentError(null);
+        setPaymentProcessing(false);
+        
+        // Close modal after a short delay to allow user to see success message
+        setTimeout(() => {
+            setPaymentModalOpen(false);
+        setCurrentStep(4);
+            setSuccess("Appointment created successfully! Payment completed successfully!");
+            setIsSuccess(true);
+        }, 2000);
+    };
+
+    // Handle payment failure
+    const handlePaymentFailure = (error) => {
+        console.error('Payment failed:', error);
+        setPaymentError(error);
+        setPaymentResult(null);
+        setPaymentProcessing(false);
+        
+        // Don't close modal, allow user to try again or cancel
+    };
+    
     // Handle vaccine selection based on type (new, existing, or next dose)
-    const handleVaccineSelection = (vaccine, type) => {
-        let isAlreadySelected;
-        switch (type) {
-            case 'new':
-                isAlreadySelected = selectedVaccines.some(v => v.vaccineId === vaccine.id);
-                if (!isAlreadySelected) {
-                    setSelectedVaccines([...selectedVaccines, {
-                        ...vaccine,
-                        vaccineId: vaccine.id,
-                        type: 'NEW_VACCINE'
-                    }]);
-                }
-                break;
-            
-            case 'next':
-                isAlreadySelected = selectedVaccines.some(v => v.doseScheduleId === vaccine.id);
-                if (!isAlreadySelected) {
-                    setSelectedVaccines([...selectedVaccines, {
-                        ...vaccine,
-                        doseScheduleId: vaccine.id,
-                        type: 'NEXT_DOSE'
-                    }]);
-                }
-                break;
-            
-            case 'combo':
-                isAlreadySelected = selectedVaccines.some(v => v.comboId === vaccine.comboId);
-                if (!isAlreadySelected) {
-                    setSelectedVaccines([...selectedVaccines, {
-                        ...vaccine,
-                        type: 'VACCINE_COMBO'
-                    }]);
-                }
-                break;
-            
-            default:
-                console.error('Invalid vaccine type:', type);
-                return;
+    const handleVaccineSelection = (vaccine, isSelected) => {
+        // Debug the incoming vaccine object
+        console.log('handleVaccineSelection called with:', { vaccine, isSelected, type: appointmentType });
+        console.log('Current selectedVaccines:', selectedVaccines);
+
+        // Check if vaccine is already paid
+        if (vaccine.isPaid) {
+            console.log("This dose is already paid:", vaccine);
+            toast.info("This dose is already paid. You can schedule an appointment for it but you won't be charged again.");
         }
+
+        if (isSelected) {
+            // Check if vaccine is already selected using more consistent comparison
+            const isAlreadySelected = selectedVaccines.some(v => {
+                switch (v.type) {
+                    case 'NEW_VACCINE':
+                        // Try different ways to compare IDs to handle both string and number types
+                        return String(v.vaccineId) === String(vaccine.id);
+                    case 'NEXT_DOSE':
+                        const doseIdToCompare = vaccine.doseScheduleId || vaccine.id;
+                        return String(v.doseScheduleId) === String(doseIdToCompare);
+                    case 'VACCINE_COMBO':
+                        const comboIdToCompare = vaccine.comboId || vaccine.id;
+                        return String(v.comboId) === String(comboIdToCompare);
+                    default:
+                        return false;
+                }
+            });
+
+            if (isAlreadySelected) {
+                console.log('Vaccine already selected, skipping:', vaccine);
+                return;
+            }
+
+            // Add vaccine to selection
+            let vaccineToAdd;
+            
+            console.log('Adding vaccine:', vaccine);
+            
+            switch (appointmentType) {
+                case 'NEXT_DOSE':
+                    console.log("Processing NEXT_DOSE selection:", vaccine);
+                    
+                    // Use the direct fields provided by the enhanced backend DTO
+                    vaccineToAdd = {
+                        type: 'NEXT_DOSE',
+                        doseScheduleId: String(vaccine.id || 0),
+                        vaccineOfChildId: String(vaccine.vaccineOfChild?.id || 0),
+                        doseNumber: vaccine.doseNumber || 1,
+                        // Use direct fields from backend
+                        name: vaccine.vaccineName || "Unknown Vaccine",
+                        price: Number(vaccine.price || 0),
+                        description: vaccine.vaccineDescription || vaccine.description || "No description available",
+                        manufacturer: vaccine.vaccineManufacturer || vaccine.manufacturer || "Unknown",
+                        totalDoses: vaccine.totalDoses || 4,
+                        scheduledDate: vaccine.scheduledDate || null,
+                        isPaid: vaccine.isPaid === true,
+                        vaccineId: vaccine.vaccineId || 0,
+                        isFromCombo: vaccine.isFromCombo || false,
+                        // Include the full vaccineOfChild object for reference
+                        vaccineOfChild: vaccine.vaccineOfChild,
+                        // Display format for UI
+                        displayDose: `Dose ${vaccine.doseNumber || 1} of ${vaccine.totalDoses || 4}`
+                    };
+                    
+                    // Extra logging for debugging
+                    console.log('Formatted NEXT_DOSE data:', vaccineToAdd);
+                    console.log('Dose vaccine info - direct fields:', {
+                        id: vaccine.id,
+                        name: vaccine.vaccineName,
+                        price: vaccine.price,
+                        doseNumber: vaccine.doseNumber,
+                        totalDoses: vaccine.totalDoses,
+                        isPaid: vaccine.isPaid
+                    });
+                    break;
+                    
+                case 'VACCINE_COMBO':
+                    if (!vaccine.id && !vaccine.comboId) {
+                        console.error('Missing combo ID for combo:', vaccine);
+                        setError('Invalid combo data: missing combo ID');
+                        return;
+                    }
+                    
+                    const comboId = vaccine.comboId || vaccine.id;
+                    
+                    // Log the complete combo object to see what's available
+                    console.log('Complete combo object:', vaccine);
+                    
+                    // Ensure we have a proper vaccines array with all vaccines in the combo
+                    const comboVaccines = vaccine.vaccines || [];
+                    console.log('Combo vaccines:', comboVaccines);
+                    
+                    vaccineToAdd = {
+                        type: 'VACCINE_COMBO',
+                        comboId: String(comboId),
+                        price: vaccine.price || 0, 
+                        name: vaccine.comboName || vaccine.name || 'Vaccine Combo',
+                        description: vaccine.description || "No description available",
+                        // Store all vaccines in the combo with their details
+                        vaccines: comboVaccines.map(v => ({
+                            vaccineId: v.vaccineId,
+                            name: v.vaccineName || v.name || "Unknown Vaccine",
+                            price: v.price || 0,
+                            totalDose: v.totalDose || 1
+                        }))
+                    };
+                    
+                    // Extra logging to verify the vaccines are properly included
+                    console.log('Combo vaccines to be added:', vaccineToAdd.vaccines);
+                break;
+            
+                default: // NEW_VACCINE
+                    if (!vaccine.id) {
+                        console.error('Missing vaccine ID for new vaccine:', vaccine);
+                        setError('Invalid vaccine data: missing vaccine ID');
+                        return;
+                    }
+                    
+                    vaccineToAdd = {
+                        type: 'NEW_VACCINE',
+                        vaccineId: String(vaccine.id),
+                        doseNumber: vaccine.doseNumber || 1,
+                        price: vaccine.price || 0,
+                        name: vaccine.name || 'Unknown Vaccine',
+                        description: vaccine.description,
+                        manufacturer: vaccine.manufacturer,
+                        categoryName: vaccine.categoryName
+                    };
+            }
+            
+            console.log('Formatted vaccine to add:', vaccineToAdd);
+            
+            // Validate the formatted vaccine - make sure essential fields are set
+            if (!vaccineToAdd.name) {
+                console.error('Invalid vaccine data after formatting: missing name', vaccineToAdd);
+                setError('Invalid vaccine data: missing name');
+                return;
+            }
+            
+            setSelectedVaccines(prev => [...prev, vaccineToAdd]);
+        } else {
+            // Remove vaccine from selection - more consistent comparison
+            setSelectedVaccines(prev => prev.filter(v => {
+                switch (v.type) {
+                    case 'NEW_VACCINE':
+                        return String(v.vaccineId) !== String(vaccine.id);
+                    case 'NEXT_DOSE':
+                        const doseIdToCheck = vaccine.id || vaccine.doseScheduleId;
+                        return String(v.doseScheduleId) !== String(doseIdToCheck);
+                    case 'VACCINE_COMBO':
+                        const comboIdToCheck = vaccine.id || vaccine.comboId;
+                        return String(v.comboId) !== String(comboIdToCheck);
+                    default:
+                        return true; // Keep items that don't match any type
+                }
+            }));
+        }
+        
+        // Recalculate invoice after selection change
+        calculateInvoice();
     };
     
     const handleRemoveVaccine = (vaccine) => {
@@ -321,10 +750,148 @@ const AppointmentCreation = () => {
             // Calculate invoice before moving to step 3
             calculateInvoice();
         } else if (currentStep === 3) {
-            if (invoice && invoice.totalAmount > 0 && !paymentMethod) {
+            // Enhanced validation for appointment creation
+            if (!selectedChild) {
+                setError('Missing child information. Please go back to step 1.');
+                return;
+            }
+            if (!selectedDate) {
+                setError('Missing appointment date. Please go back to step 2.');
+                return;
+            }
+            if (!selectedTimeSlot) {
+                setError('Missing time slot. Please go back to step 2.');
+                return;
+            }
+            if (!selectedDoctor) {
+                setError('Missing doctor selection. Please go back to step 2.');
+                return;
+            }
+            if (selectedVaccines.length === 0) {
+                setError('No vaccines selected. Please go back to step 1.');
+                return;
+            }
+            
+            // Fix any incorrectly formatted vaccine objects - ensure they have the right field names
+            const fixedVaccines = selectedVaccines.map(vaccine => {
+                const fixedVaccine = { ...vaccine };
+                
+                // Make sure 'type' is set
+                if (!fixedVaccine.type) {
+                    // Try to determine type from available fields
+                    if (fixedVaccine.comboId) {
+                        fixedVaccine.type = 'VACCINE_COMBO';
+                    } else if (fixedVaccine.doseScheduleId || fixedVaccine.vaccineOfChildId) {
+                        fixedVaccine.type = 'NEXT_DOSE';
+                    } else {
+                        fixedVaccine.type = 'NEW_VACCINE';
+                    }
+                }
+                
+                // Fix NEW_VACCINE type
+                if (fixedVaccine.type === 'NEW_VACCINE') {
+                    // Move id to vaccineId if needed
+                    if (!fixedVaccine.vaccineId && fixedVaccine.id) {
+                        fixedVaccine.vaccineId = fixedVaccine.id;
+                    }
+                }
+                
+                // Fix NEXT_DOSE type
+                if (fixedVaccine.type === 'NEXT_DOSE') {
+                    // Make sure doseScheduleId is set
+                    if (!fixedVaccine.doseScheduleId && fixedVaccine.id) {
+                        fixedVaccine.doseScheduleId = fixedVaccine.id;
+                    }
+                }
+                
+                // Fix VACCINE_COMBO type
+                if (fixedVaccine.type === 'VACCINE_COMBO') {
+                    // Make sure comboId is set
+                    if (!fixedVaccine.comboId && fixedVaccine.id) {
+                        fixedVaccine.comboId = fixedVaccine.id;
+                    }
+                }
+                
+                return fixedVaccine;
+            });
+            
+            // Update the selectedVaccines array with the fixed vaccines
+            setSelectedVaccines(fixedVaccines);
+            
+            // Validate vaccines data based on type
+            const invalidVaccines = fixedVaccines.filter(vaccine => {
+                // Log each vaccine being validated
+                console.log('Validating vaccine:', vaccine);
+                
+                let isInvalid = false;
+                
+                switch (vaccine.type) {
+                    case 'NEW_VACCINE':
+                        // For NEW_VACCINE, we need vaccineId to be set
+                        isInvalid = !vaccine.vaccineId || vaccine.vaccineId === 'undefined' || vaccine.vaccineId === '';
+                        
+                        // If we still think it's invalid but have id available, it could be a valid vaccine
+                        // This handles cases where we have id = 1 but vaccineId is missing
+                        if (isInvalid && vaccine.id && typeof vaccine.id === 'string' && vaccine.id !== '') {
+                            console.log('Fixing NEW_VACCINE with missing vaccineId using id:', vaccine.id);
+                            vaccine.vaccineId = vaccine.id;
+                            isInvalid = false;
+                        }
+                        break;
+                        
+                    case 'NEXT_DOSE':
+                        // Check for required fields for NEXT_DOSE
+                        isInvalid = (!vaccine.doseScheduleId || vaccine.doseScheduleId === 'undefined' || vaccine.doseScheduleId === '') || 
+                                  (!vaccine.vaccineOfChildId || vaccine.vaccineOfChildId === 'undefined' || vaccine.vaccineOfChildId === '');
+                        break;
+                        
+                    case 'VACCINE_COMBO':
+                        // Check for required fields for VACCINE_COMBO
+                        isInvalid = !vaccine.comboId || vaccine.comboId === 'undefined' || vaccine.comboId === '';
+                        break;
+                        
+                    default:
+                        console.warn('Unknown vaccine type:', vaccine.type);
+                        isInvalid = true;
+                }
+                
+                return isInvalid;
+            });
+            
+            if (invalidVaccines.length > 0) {
+                console.error('Invalid vaccine data detected:', invalidVaccines);
+                
+                // Instead of showing an error, try to clean up the invalid vaccines
+                if (invalidVaccines.length < fixedVaccines.length) {
+                    // We have some valid vaccines, so we can remove the invalid ones
+                    const validVaccines = fixedVaccines.filter(v => !invalidVaccines.includes(v));
+                    setSelectedVaccines(validVaccines);
+                    console.log('Removed invalid vaccines, proceeding with valid ones:', validVaccines);
+                } else {
+                    // All vaccines are invalid, show error
+                setError('One or more vaccines have invalid data. Please try selecting vaccines again.');
+                return;
+                }
+            }
+            
+            // Payment validation
+            if (invoice && invoice.totalAmount > 0) {
+                if (!paymentMethod) {
                 setError('Please select a payment method');
                 return;
             }
+            } else {
+                // If no payment required, default to OFFLINE
+                setPaymentMethod('OFFLINE');
+            }
+            
+            // All validations passed, show loading state
+            setIsCreatingAppointment(true);
+            
+            // Clear any previous errors
+            setError('');
+            
+            // Create the appointment
             handleCreateAppointment();
             return;
         }
@@ -346,7 +913,7 @@ const AppointmentCreation = () => {
     
     // Modify date selection to use a calendar view
     const renderCalendar = () => {
-        if (Object.keys(availableSlots).length === 0) {
+        if (availableDates.length === 0) {
             return (
                 <div className="text-center text-muted my-3">
                     <p>No available dates found for the next 30 days.</p>
@@ -365,8 +932,10 @@ const AppointmentCreation = () => {
         // Get first day of month
         const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
         
-        // Create array of available dates formatted as YYYY-MM-DD
-        const availableDateStrings = Object.keys(availableSlots).map(d => d.date);
+        // Format available dates as strings for easy comparison
+        const availableDateStrings = availableDates.map(date => 
+            typeof date === 'string' ? date : format(new Date(date), 'yyyy-MM-dd')
+        );
         
         // Create calendar grid
         const calendarDays = [];
@@ -383,13 +952,6 @@ const AppointmentCreation = () => {
             const isPastDate = date < today;
             const isAvailable = availableDateStrings.includes(dateString);
             const isSelected = selectedDate === dateString;
-            
-            // Get doctor count for this date (if in dateFirst mode)
-            let doctorCount = 0;
-            if (isDayPriority === true && isAvailable) {
-                const dateData = Object.entries(availableSlots).find(([key, value]) => key.date === dateString);
-                doctorCount = dateData ? (dateData[1].doctorCount || 0) : 0;
-            }
             
             calendarDays.push(
                 <div 
@@ -408,15 +970,14 @@ const AppointmentCreation = () => {
                             if (isDayPriority === true) {
                                 setSelectedDoctor('');
                             }
+                            
+                            // Directly call our improved fetchAvailableTimeSlots function
+                            const doctorId = isDayPriority === false ? selectedDoctor : null;
+                            fetchAvailableTimeSlots(dateString, doctorId);
                         }
                     }}
                 >
                     <div className="day-number">{day}</div>
-                    {isAvailable && isDayPriority === true && (
-                        <small className="doctor-count">
-                            {doctorCount} {doctorCount === 1 ? 'doctor' : 'doctors'}
-                        </small>
-                    )}
                 </div>
             );
         }
@@ -513,75 +1074,16 @@ const AppointmentCreation = () => {
                             </div>
                 </Form.Group>
                 
-                        {!appointmentType && (
-                            <Alert variant="info">
-                                Please select an appointment type to view available vaccines.
-                            </Alert>
-                        )}
-
-                        {appointmentType && !childVaccineData && (
-                            <div className="text-center">
-                                <Spinner animation="border" role="status">
-                                    <span className="visually-hidden">Loading...</span>
-                                </Spinner>
-                                                </div>
-                        )}
-
-                        {childVaccineData && (
-                            <div>
-                                <Row>
-                                    {appointmentType === 'NEW_VACCINE' && childVaccineData.availableVaccines?.length > 0 && renderAvailableVaccines()}
-                                    {appointmentType === 'NEXT_DOSE' && childVaccineData.upcomingDoses?.length > 0 && renderUpcomingDoses()}
-                                    {appointmentType === 'VACCINE_COMBO' && childVaccineData.vaccineCombos?.length > 0 && renderVaccineCombos()}
-                                    
-                                    {appointmentType === 'NEW_VACCINE' && (!childVaccineData.availableVaccines || childVaccineData.availableVaccines.length === 0) && (
-                                        <Alert variant="info">
-                                            No new vaccines available for this child at the moment.
-                                        </Alert>
-                                    )}
-                                    
-                                    {appointmentType === 'NEXT_DOSE' && (!childVaccineData.upcomingDoses || childVaccineData.upcomingDoses.length === 0) && (
-                                        <Alert variant="info">
-                                            No upcoming doses scheduled for this child at the moment.
-                                        </Alert>
-                                    )}
-                                    
-                                    {appointmentType === 'VACCINE_COMBO' && (!childVaccineData.vaccineCombos || childVaccineData.vaccineCombos.length === 0) && (
-                                        <Alert variant="info">
-                                            No vaccine combos available at the moment.
-                                        </Alert>
-                                    )}
-                            </Row>
-
-                                {selectedVaccines.length > 0 && (
+                        {appointmentType && (
                                     <div className="mt-4">
-                                        <h5>Selected Vaccines:</h5>
-                                        <ListGroup>
-                                            {selectedVaccines.map((vaccine, index) => (
-                                                <ListGroup.Item key={index} className="d-flex justify-content-between align-items-center">
-                                                    <div>
-                                                        {appointmentType === 'NEW_VACCINE' && vaccine.name}
-                                                        {appointmentType === 'NEXT_DOSE' && `${vaccine.vaccine.name} (Dose ${vaccine.doseNumber})`}
-                                                        {appointmentType === 'VACCINE_COMBO' && vaccine.comboName}
-                                                    </div>
-                                                    <Button 
-                                                        variant="outline-danger" 
-                                                        size="sm"
-                                                        onClick={() => handleRemoveVaccine(vaccine)}
-                                                    >
-                                                        Remove
-                                                    </Button>
-                                                </ListGroup.Item>
-                                            ))}
-                                        </ListGroup>
-                                    </div>
-                        )}
+                                <h5>Available {appointmentType.toLowerCase().replace('_', ' ')}s</h5>
+                                {renderAvailableVaccines()}
                     </div>
                         )}
                     </>
                 )}
 
-                <div className="mt-4 d-flex justify-content-between">
+                <div className="d-flex justify-content-between mt-4">
                     <Button 
                         variant="secondary" 
                         onClick={handleBack}
@@ -686,14 +1188,14 @@ const AppointmentCreation = () => {
                 <h5>Select Date</h5>
                 <FallbackWarning message={dateWarning} />
                 
-                {isLoadingSchedule ? (
+                {isLoadingDates ? (
                     <div className="text-center py-4">
                         <Spinner animation="border" role="status" variant="primary">
                             <span className="visually-hidden">Loading available dates...</span>
                         </Spinner>
                         <p className="mt-2">Loading available dates...</p>
                     </div>
-                ) : Object.keys(availableSlots).length > 0 ? (
+                ) : availableDates.length > 0 ? (
                     renderCalendar()
                 ) : (
                     <Alert variant="info">
@@ -706,51 +1208,64 @@ const AppointmentCreation = () => {
 
     const renderTimeSlotSelection = () => {
         return (
-            <div className="mb-4">
-                <h5>Select Time</h5>
-                
-                {!selectedDate ? (
-                    <Alert variant="info">Please select a date first.</Alert>
-                ) : isLoadingSchedule ? (
-                    <div className="text-center py-4">
-                        <Spinner animation="border" role="status" variant="primary">
+            <div className="time-slot-selection">
+                <h3 className="my-3">Select a Time Slot</h3>
+                {isLoadingTimeSlots ? (
+                    <div className="text-center my-5">
+                        <Spinner animation="border" role="status">
                             <span className="visually-hidden">Loading time slots...</span>
                         </Spinner>
                         <p className="mt-2">Loading available time slots...</p>
                     </div>
-                ) : Object.keys(availableSlots).length > 0 ? (
-                    <Row className="g-3">
-                        {Object.entries(availableSlots).map(([doctorName, slots]) => (
-                            <Col xs={12} key={doctorName}>
-                                <Card className="mb-3">
-                                    <Card.Header>{doctorName}</Card.Header>
-                                    <Card.Body>
-                                        <Row className="g-2">
-                                            {slots.map(slot => (
-                                                <Col xs={6} sm={4} md={3} key={slot}>
+                ) : timeSlotWarning ? (
+                    <FallbackWarning message={timeSlotWarning} />
+                ) : availableSlots && Object.keys(availableSlots).length > 0 ? (
+                    <Row className="time-slots-container">
+                        {isDayPriority ? (
+                            // Date-first approach: Show all time slots
+                            availableSlots['all']?.map((slot, idx) => (
+                                <Col xs={12} md={6} lg={3} key={idx}>
                                                     <Button
-                                                        variant={selectedTimeSlot === slot ? "primary" : "outline-primary"}
-                                                        className="w-100 mb-2"
-                                                        onClick={() => {
-                                                            setSelectedTimeSlot(slot);
-                                                            if (isDayPriority) {
-                                                                setSelectedDoctor(doctorName);
-                                                            }
-                                                        }}
-                                                    >
-                                                        {slot}
+                                        variant={selectedTimeSlot === slot.id ? "primary" : "outline-primary"}
+                                        className={`time-slot-btn w-100 mb-3 ${!slot.available ? 'disabled' : ''}`}
+                                        onClick={() => handleTimeSlotSelect(slot.id)}
+                                        disabled={!slot.available}
+                                    >
+                                        <div>{slot.id}</div>
+                                        <Badge 
+                                            bg="success"
+                                            className="availability-badge"
+                                        >
+                                            {slot.availableCount}
+                                        </Badge>
                                                     </Button>
                                                 </Col>
-                                            ))}
-                                        </Row>
-                                    </Card.Body>
-                                </Card>
+                            ))
+                        ) : (
+                            // Doctor-first approach: Show time slots for the selected doctor
+                            availableSlots[selectedDoctor]?.map((slot, idx) => (
+                                <Col xs={12} md={6} lg={3} key={idx}>
+                                    <Button
+                                        variant={selectedTimeSlot === slot.id ? "primary" : "outline-primary"}
+                                        className={`time-slot-btn w-100 mb-3 ${!slot.available ? 'disabled' : ''}`}
+                                        onClick={() => handleTimeSlotSelect(slot.id)}
+                                        disabled={!slot.available}
+                                    >
+                                        <div>{slot.id}</div>
+                                        <Badge 
+                                            bg="success"
+                                            className="availability-badge"
+                                        >
+                                            {slot.availableCount}
+                                        </Badge>
+                                    </Button>
                             </Col>
-                        ))}
+                            ))
+                        )}
                     </Row>
                 ) : (
-                    <Alert variant="warning">
-                        No time slots available for the selected date. Please choose a different date.
+                    <Alert variant="info">
+                        No time slots available for the selected date.
                     </Alert>
                 )}
             </div>
@@ -762,6 +1277,10 @@ const AppointmentCreation = () => {
         const doctorsToDisplay = isDayPriority === true 
             ? availableDoctorsForTimeSlot 
             : availableDoctorsForSelection;
+        
+        // Debug logging to check what doctor data we have
+        console.log('Rendering doctors in mode:', isDayPriority ? 'Date-first' : 'Doctor-first');
+        console.log('Doctors to display:', doctorsToDisplay);
         
         return (
             <div className="mb-4">
@@ -779,16 +1298,25 @@ const AppointmentCreation = () => {
                     </div>
                 ) : doctorsToDisplay && doctorsToDisplay.length > 0 ? (
                     <Row className="g-3">
-                        {doctorsToDisplay.map(doctor => (
+                        {doctorsToDisplay.map(doctor => {
+                            // Debug log for each doctor
+                            console.log('Rendering doctor:', doctor);
+                            
+                            // Get doctor name or fallback
+                            const firstName = doctor.firstName || '';
+                            const lastName = doctor.lastName || '';
+                            const doctorName = (firstName || lastName) ? `${firstName} ${lastName}`.trim() : 'Unknown'; 
+                            
+                            return (
                             <Col xs={12} sm={6} md={4} key={doctor.id}>
                                 <Card 
                                     onClick={() => handleDoctorSelect(doctor)}
-                                    className={`doctor-card ${selectedDoctor?.id === doctor.id ? 'selected border-primary' : ''}`}
+                                        className={`doctor-card ${selectedDoctor === doctor.id ? 'selected border-primary' : ''}`}
                                     style={{ 
                                         cursor: 'pointer', 
                                         transition: 'all 0.3s ease',
-                                        transform: selectedDoctor?.id === doctor.id ? 'translateY(-3px)' : 'none',
-                                        boxShadow: selectedDoctor?.id === doctor.id ? '0 4px 8px rgba(0,0,0,0.1)' : '0 1px 3px rgba(0,0,0,0.05)'
+                                            transform: selectedDoctor === doctor.id ? 'translateY(-3px)' : 'none',
+                                            boxShadow: selectedDoctor === doctor.id ? '0 4px 8px rgba(0,0,0,0.1)' : '0 1px 3px rgba(0,0,0,0.05)'
                                     }}
                                 >
                                     <Card.Body>
@@ -797,9 +1325,11 @@ const AppointmentCreation = () => {
                                                 icon={faUser} 
                                                 className="me-2" 
                                                 size="lg" 
-                                                color={selectedDoctor?.id === doctor.id ? '#007bff' : '#6c757d'} 
+                                                    color={selectedDoctor === doctor.id ? '#007bff' : '#6c757d'} 
                                             />
-                                            <Card.Title className="mb-0">Dr. {doctor.firstName} {doctor.lastName}</Card.Title>
+                                                <Card.Title className="mb-0">
+                                                    Dr. {doctorName}
+                                                </Card.Title>
                                         </div>
                                         <Badge bg="info" className="mb-2">{doctor.specialization || 'Pediatrician'}</Badge>
                                         <Card.Text className="mt-2 small text-muted">
@@ -810,7 +1340,8 @@ const AppointmentCreation = () => {
                                     </Card.Body>
                                 </Card>
                             </Col>
-                        ))}
+                            );
+                        })}
                     </Row>
                 ) : (
                     <Alert variant="warning">
@@ -847,14 +1378,14 @@ const AppointmentCreation = () => {
                             {invoice?.unpaidVaccines.map((vaccine, index) => (
                                 <ListGroup.Item key={index}>
                                     {vaccine.name} - Dose {vaccine.doseNumber}
-                                    <span className="float-end">${vaccine.price}</span>
+                                    <span className="float-end">{formatCurrency(vaccine.price)}</span>
                                 </ListGroup.Item>
                             ))}
                         </ListGroup>
                         
                         <div className="d-flex justify-content-between fw-bold fs-5 mt-3">
                             <span>Total Amount:</span>
-                            <span>${invoice?.totalAmount || 0}</span>
+                            <span>{formatCurrency(invoice?.totalAmount || 0)}</span>
                         </div>
                         
                         {isPrePaid && (
@@ -908,15 +1439,34 @@ const AppointmentCreation = () => {
                     <h6>Appointment Details:</h6>
                     <p><strong>Date:</strong> {formatDate(selectedDate)}</p>
                     <p><strong>Time:</strong> {
-                        Object.values(availableSlots).find(ts => ts.id === parseInt(selectedTimeSlot))
-                            ? `${Object.values(availableSlots).find(ts => ts.id === parseInt(selectedTimeSlot)).startTime} - 
-                               ${Object.values(availableSlots).find(ts => ts.id === parseInt(selectedTimeSlot)).endTime}`
+                        selectedTimeSlot ? 
+                            (() => {
+                                // Try to format the time slot ID (which is usually like "8-9" or "9-10")
+                                const timeSlotParts = selectedTimeSlot.toString().split('-');
+                                if (timeSlotParts.length === 2) {
+                                    const start = timeSlotParts[0].padStart(2, '0') + ':00';
+                                    const end = timeSlotParts[1].padStart(2, '0') + ':00';
+                                    return `${start} - ${end}`;
+                                }
+                                // If we can't format it, just show the ID
+                                return selectedTimeSlot;
+                            })()
                             : 'Not selected'
                     }</p>
                     <p><strong>Doctor:</strong> {
-                        selectedDoctor 
-                            ? `Dr. ${Object.values(availableSlots).find(d => d.id === selectedDoctor)?.firstName} 
-                               ${Object.values(availableSlots).find(d => d.id === selectedDoctor)?.lastName}`
+                        selectedDoctor ? 
+                            (() => {
+                                // Look for the doctor in the appropriate list
+                                const doctorsList = isDayPriority ? availableDoctorsForTimeSlot : availableDoctorsForSelection;
+                                const doctor = doctorsList.find(d => d.id === selectedDoctor);
+                                
+                                // Format the doctor name
+                                const firstName = doctor?.firstName || '';
+                                const lastName = doctor?.lastName || '';
+                                const doctorName = (firstName || lastName) ? `${firstName} ${lastName}`.trim() : 'Unknown';
+                                
+                                return `Dr. ${doctorName}`;
+                            })()
                             : 'Any available doctor'
                     }</p>
                     {notes && <p><strong>Notes:</strong> {notes}</p>}
@@ -925,92 +1475,225 @@ const AppointmentCreation = () => {
         );
     };
     
+    // Add a helper function to format currency in VND
+    const formatCurrency = (amount) => {
+        // Format as Vietnamese Dong (VND)
+        return new Intl.NumberFormat('vi-VN', {
+            style: 'currency',
+            currency: 'VND',
+            maximumFractionDigits: 0, // VND doesn't use decimal places
+        }).format(amount);
+    };
+    
     // Render Step 4: Confirmation
     const renderStep4 = () => {
-        // Calculate child info
-        const childInfo = children.find(child => child.child_id === selectedChild) || {};
+        // Calculate child info from received data or local state
+        const childInfo = invoice?.childName 
+            ? { child_name: invoice.childName } 
+            : children.find(child => child.child_id === selectedChild) || {};
         
-        // Get time slot info
-        const selectedTimeSlotInfo = Object.values(availableSlots).find(ts => ts.id === parseInt(selectedTimeSlot)) || {};
+        // Get doctor info for display - prioritize server data
+        const doctorName = invoice?.doctorName || (() => {
+            // Look for the doctor in the appropriate list based on selection mode
+            const doctorsList = isDayPriority ? availableDoctorsForTimeSlot : availableDoctorsForSelection;
+            const doctor = doctorsList?.find(d => d.id === selectedDoctor);
+            if (doctor) {
+                return `${doctor.firstName || ''} ${doctor.lastName || ''}`.trim();
+            }
+            return 'Your doctor';
+        })();
         
-        // Get doctor info
-        const selectedDoctorInfo = isDayPriority === true 
-            ? availableDoctorsForTimeSlot.find(d => d.id === selectedDoctor) 
-            : availableDoctorsForSelection.find(d => d.id === selectedDoctor) || {};
+        // Use invoice data if available, with specific priorities
+        const paymentDetails = invoice || {};
         
-        // Calculate total amount for invoice
-        const calculateProvisionalInvoiceTotal = () => {
-            let total = 0;
-            selectedVaccines.forEach(vaccine => {
-                if (!vaccine.isPaid) {
-                    total += (vaccine.vaccine.price || 0);
-                }
-            });
-            return total;
-        };
+        // Format appointment date for display, prioritize server data
+        const appointmentDateObj = invoice?.appointmentTime 
+            ? new Date(invoice.appointmentTime) 
+            : selectedDate ? new Date(selectedDate) : null;
+            
+        const appointmentDateFormatted = appointmentDateObj 
+            ? formatDate(appointmentDateObj) 
+            : 'Scheduled date';
         
+        // Determine time slot display
+        const timeSlotDisplay = invoice?.timeSlot || formatTimeSlot(selectedTimeSlot);
+        
+        // Define allPaid variable - check if all vaccines are paid for
+        const allPaid = invoice?.isPaid === true || selectedVaccines.every(v => v.isPaid === true);
+        
+        // Define payment method text
+        const paymentMethodText = invoice?.paymentMethod || paymentMethod || (allPaid ? 'Pre-paid' : 'Pay at clinic');
+
+        // Get vaccines from either invoice.appointmentVaccines or selectedVaccines
+        const displayVaccines = invoice?.appointmentVaccines && invoice.appointmentVaccines.length > 0
+            ? invoice.appointmentVaccines
+            : selectedVaccines;
+
         return (
-            <div className="mt-4">
-                <h4 className="mb-3">
-                    <FontAwesomeIcon icon={faCheck} className="me-2" />
-                    Appointment Summary
-                </h4>
+            <div className="confirmation">
+                <div className="text-center mb-4">
+                    {isSuccess ? (
+                        <>
+                            <div className="success-icon mb-3">
+                                <FontAwesomeIcon icon={faCheckCircle} size="4x" className="text-success" />
+                            </div>
+                            <h3 className="mb-3">Appointment Confirmed!</h3>
+                            <p className="lead">
+                                Your appointment has been successfully {allPaid ? 'scheduled' : 'created'}.
+                            </p>
+                            {!allPaid && paymentMethod === 'OFFLINE' && (
+                                <Alert variant="info" className="mt-3">
+                                    <FontAwesomeIcon icon={faInfoCircle} className="me-2" />
+                                    Please remember to pay at the center during your appointment.
+                                </Alert>
+                            )}
+                            {!allPaid && paymentMethod === 'ONLINE' && !paymentUrl && (
+                                <Alert variant="info" className="mt-3">
+                                    <FontAwesomeIcon icon={faInfoCircle} className="me-2" />
+                                    Your payment has been processed successfully.
+                                </Alert>
+                            )}
+                        </>
+                    ) : (
+                        <>
+                            <div className="mb-3">
+                                <Spinner animation="border" role="status" variant="primary">
+                                    <span className="visually-hidden">Processing...</span>
+                                </Spinner>
+                            </div>
+                            <h3 className="mb-3">Finalizing Your Appointment</h3>
+                            <p className="lead">Please wait while we confirm your appointment details...</p>
+                            <small className="text-muted">(This will only take a few seconds)</small>
+                        </>
+                    )}
+                </div>
                 
-                <Card className="mb-3">
-                    <Card.Body>
-                        <Row>
-                            <Col md={6}>
-                                <h5 className="mb-3">Patient Information</h5>
-                                <p><strong>Child:</strong> {childInfo?.child_name}</p>
-                                <p><strong>Age:</strong> {childInfo?.age}</p>
-                                <p><strong>Appointment Type:</strong> {isDayPriority === true ? 'New Vaccination' : 'Next Dose'}</p>
-                            </Col>
-                            <Col md={6}>
-                                <h5 className="mb-3">Schedule Information</h5>
-                                <p><strong>Date:</strong> {formatDate(selectedDate)}</p>
-                                <p><strong>Time:</strong> {selectedTimeSlotInfo?.startTime} - {selectedTimeSlotInfo?.endTime}</p>
-                                <p><strong>Doctor:</strong> Dr. {selectedDoctorInfo?.firstName} {selectedDoctorInfo?.lastName}</p>
-                            </Col>
-                        </Row>
-                        
-                        <h5 className="mb-3 mt-4">Vaccines</h5>
-                        {selectedVaccines.length > 0 ? (
-                            <ListGroup>
-                                {selectedVaccines.map((vaccine, index) => (
-                                    <ListGroup.Item key={index} className="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <span className="me-2">{vaccine.vaccine.name}</span>
-                                            {isDayPriority === false && (
-                                                <Badge bg="info" className="me-2">Dose {vaccine.doseSchedule?.doseNumber}</Badge>
-                                            )}
-                                            {vaccine.isPaid && <Badge bg="success">Paid</Badge>}
-                                        </div>
-                                        <span>${vaccine.vaccine.price}</span>
+                {isSuccess && (
+                    <>
+                        {/* Appointment Details Card */}
+                        <Card className="mb-4">
+                            <Card.Header as="h5">Appointment Details</Card.Header>
+                            <Card.Body>
+                                <ListGroup variant="flush">
+                                    <ListGroup.Item>
+                                        <strong>Appointment ID:</strong> {createdAppointmentId}
                                     </ListGroup.Item>
-                                ))}
-                            </ListGroup>
-                        ) : (
-                            <Alert variant="warning">No vaccines selected</Alert>
-                        )}
+                                    <ListGroup.Item>
+                                        <strong>Child:</strong> {invoice?.childName || childInfo.child_name || "Your child"}
+                                    </ListGroup.Item>
+                                    <ListGroup.Item>
+                                        <strong>Date:</strong> {appointmentDateFormatted}
+                                    </ListGroup.Item>
+                                    <ListGroup.Item>
+                                        <strong>Time:</strong> {timeSlotDisplay}
+                                    </ListGroup.Item>
+                                    <ListGroup.Item>
+                                        <strong>Doctor:</strong> Dr. {doctorName}
+                                    </ListGroup.Item>
+                                    {notes && (
+                                        <ListGroup.Item>
+                                            <strong>Notes:</strong> {notes}
+                                        </ListGroup.Item>
+                                    )}
+                                </ListGroup>
+                                
+                                {/* Vaccine Information */}
+                                {displayVaccines && displayVaccines.length > 0 && (
+                                    <>
+                                        <h5 className="mt-4">Vaccines</h5>
+                                        <ListGroup>
+                                            {displayVaccines.map((vaccine, index) => (
+                                                <ListGroup.Item key={index} className="d-flex justify-content-between">
+                                                    <div>
+                                                        {vaccine.vaccineName || vaccine.name || "Unknown Vaccine"} 
+                                                        {(vaccine.type === 'NEXT_DOSE' || vaccine.doseNumber) && 
+                                                            ` - Dose ${vaccine.doseNumber || 1}`
+                                                        }
+                                                        {vaccine.isPaid && (
+                                                            <Badge bg="success" className="ms-2">PAID</Badge>
+                                                        )}
+                                                    </div>
+                                                    <span>
+                                                        {vaccine.isPaid ? 'Paid' : formatCurrency(vaccine.price || 0)}
+                                                    </span>
+                                                </ListGroup.Item>
+                                            ))}
+                                        </ListGroup>
+                                    </>
+                                )}
+                            </Card.Body>
+                        </Card>
                         
-                        <h5 className="mb-3">Payment Information</h5>
-                        <p><strong>Payment Method:</strong> {paymentMethod === 'ONLINE' ? 'Online Payment (MoMo)' : 'Offline Payment (at clinic)'}</p>
-                        <p><strong>Total Amount:</strong> ${calculateProvisionalInvoiceTotal()}</p>
-                        
-                        {notes && (
-                            <>
-                                <h5 className="mb-3 mt-4">Additional Notes</h5>
-                                <p>{notes}</p>
-                            </>
-                        )}
-                    </Card.Body>
-                </Card>
+                        {/* Payment Details Card */}
+                        <Card className="mb-4">
+                            <Card.Header as="h5">Payment Details</Card.Header>
+                            <Card.Body>
+                                <ListGroup variant="flush">
+                                    <ListGroup.Item>
+                                        <strong>Payment Method:</strong> {paymentMethodText}
+                                    </ListGroup.Item>
+                                    {invoice?.paymentStatus && (
+                                        <ListGroup.Item>
+                                            <strong>Payment Status:</strong> {invoice.paymentStatus}
+                                        </ListGroup.Item>
+                                    )}
+                                    {invoice?.transactionId && (
+                                        <ListGroup.Item>
+                                            <strong>Transaction ID:</strong> {invoice.transactionId}
+                                        </ListGroup.Item>
+                                    )}
+                                    {invoice?.totalAmount && (
+                                        <ListGroup.Item>
+                                            <strong>Total Amount:</strong> {formatCurrency(invoice.totalAmount)}
+                                        </ListGroup.Item>
+                                    )}
+                                </ListGroup>
+                            </Card.Body>
+                        </Card>
+                    </>
+                )}
                 
-                {/* Error message */}
-                {error && <Alert variant="danger" className="mt-3">{error}</Alert>}
+                {isSuccess && (
+                    <div className="text-center mt-4">
+                        <Button 
+                            variant="primary" 
+                            size="lg" 
+                            onClick={() => navigate('/appointments')}
+                            className="me-3"
+                        >
+                            <FontAwesomeIcon icon={faCalendarAlt} className="me-2" />
+                            View My Appointments
+                        </Button>
+                        <Button 
+                            variant="outline-primary" 
+                            size="lg" 
+                            onClick={() => navigate('/')}
+                        >
+                            <FontAwesomeIcon icon={faHome} className="me-2" />
+                            Go to Homepage
+                        </Button>
+                    </div>
+                )}
                 
-                {/* Success message */}
-                {success && <Alert variant="success" className="mt-3">{success}</Alert>}
+                {!allPaid && paymentUrl && (
+                    <div className="text-center mt-4">
+                        <Alert variant="info">
+                            <FontAwesomeIcon icon={faInfoCircle} className="me-2" />
+                            You'll be redirected to complete your payment with MoMo.
+                        </Alert>
+                        <Button 
+                            variant="success" 
+                            size="lg" 
+                            href={paymentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-3"
+                        >
+                            <FontAwesomeIcon icon={faCreditCard} className="me-2" />
+                            Proceed to Payment
+                        </Button>
+                    </div>
+                )}
             </div>
         );
     };
@@ -1047,6 +1730,25 @@ const AppointmentCreation = () => {
                         )}
                     </Button>
                 )}
+                
+                {currentStep === 4 && (
+                    <div className="d-flex justify-content-center w-100 gap-3">
+                        <Button 
+                            variant="primary" 
+                            onClick={() => navigate('/appointments')}
+                        >
+                            <FontAwesomeIcon icon={faCalendarAlt} className="me-2" />
+                            View My Appointments
+                        </Button>
+                        <Button 
+                            variant="outline-primary" 
+                            onClick={() => navigate('/')}
+                        >
+                            <FontAwesomeIcon icon={faHome} className="me-2" />
+                            Go to Homepage
+                        </Button>
+                    </div>
+                )}
             </div>
         );
     };
@@ -1061,6 +1763,7 @@ const AppointmentCreation = () => {
         if (success) {
             const timer = setTimeout(() => {
                 setSuccess('');
+                setIsSuccess(false);
             }, 5000); // Clear success after 5 seconds
             
             return () => clearTimeout(timer);
@@ -1069,24 +1772,50 @@ const AppointmentCreation = () => {
     
     // Fetch available doctors for a specific time slot (date-first mode)
     const fetchAvailableDoctorsForTimeSlot = useCallback(async () => {
-        if (!selectedDate || !selectedTimeSlot) return [];
+        if (!selectedDate || !selectedTimeSlot) return;
         
-        try {
             setIsLoadingDoctors(true);
+        setDoctorWarning('');
+        try {
+            // Get the slot ID from the selected time slot (could be the object or just the ID)
+            const slotId = typeof selectedTimeSlot === 'object' ? selectedTimeSlot.id : selectedTimeSlot;
             
-            console.log(`Fetching doctors available on ${selectedDate} for time slot ${selectedTimeSlot}`);
-            const result = await appointmentService.getAvailableDoctorsForTimeSlot(selectedDate, selectedTimeSlot);
+            // Fetch doctors available for this date and time slot
+            const doctors = await appointmentService.getAvailableDoctorsForTimeSlot(selectedDate, slotId);
             
-            console.log('Available doctors for time slot:', result);
-            setAvailableDoctorsForTimeSlot(result || []);
-            if (result && result.length === 0) {
-                setDoctorWarning('No doctors available for the selected time slot.');
+            // Debug the raw doctor data we're receiving
+            console.log('Raw doctor data from API:', doctors);
+            
+            if (doctors && doctors.length > 0) {
+                // Ensure all doctor objects have consistent fields 
+                const formattedDoctors = doctors.map(doctor => {
+                    console.log('Processing doctor:', doctor);
+                    
+                    // Create a normalized doctor object
+                    const normalizedDoctor = {
+                        id: doctor.id,
+                        firstName: doctor.firstName || doctor.first_name || doctor.fullName?.split(' ')[0] || doctor.full_name?.split(' ')[0] || doctor.name?.split(' ')[0] || doctor.doctorName?.split(' ')[0] || doctor.employeeName?.split(' ')[0] || '',
+                        lastName: doctor.lastName || doctor.last_name || (doctor.fullName?.split(' ').slice(1).join(' ')) || (doctor.full_name?.split(' ').slice(1).join(' ')) || (doctor.name?.split(' ').slice(1).join(' ')) || (doctor.doctorName?.split(' ').slice(1).join(' ')) || (doctor.employeeName?.split(' ').slice(1).join(' ')) || '',
+                        specialization: doctor.specialization || 'Pediatrician',
+                        imageUrl: doctor.imageUrl || null
+                    };
+                    
+                    console.log('Normalized doctor:', normalizedDoctor);
+                    return normalizedDoctor;
+                });
+                
+                setAvailableDoctorsForTimeSlot(formattedDoctors);
+                console.log('Available doctors for time slot:', formattedDoctors);
+                return formattedDoctors;
             } else {
-                setDoctorWarning('');
+                setAvailableDoctorsForTimeSlot([]);
+                setDoctorWarning('No doctors available for the selected time slot.');
+                return [];
             }
-            return result || [];
         } catch (error) {
             console.error('Error fetching doctors for time slot:', error);
+            setDoctorWarning('Failed to load available doctors. Please try again.');
+            
             // Use fallback doctors if fetch failed
             const fallbackDoctors = appointmentService.generateFallbackDoctors(selectedTimeSlot);
             setAvailableDoctorsForTimeSlot(fallbackDoctors);
@@ -1111,8 +1840,95 @@ const AppointmentCreation = () => {
             if (isDayPriority === true) {
                 setSelectedDoctor(null);
             }
+            
+            // Directly fetch time slots for the selected date
+            if (formattedDate) {
+                const doctorId = isDayPriority === false ? selectedDoctor : null;
+                fetchAvailableTimeSlots(formattedDate, doctorId);
+            } else {
             setAvailableSlots({});
-            setAvailableDoctorsForTimeSlot([]);
+            }
+        }
+    };
+
+    // Function to fetch available dates
+    const fetchAvailableDates = async (doctorId = null) => {
+        setIsLoadingDates(true);
+        setDateWarning('');
+        try {
+            // Get today's date and a month from now for the date range
+            const startDate = format(new Date(), 'yyyy-MM-dd');
+            const endDate = format(addDays(new Date(), 30), 'yyyy-MM-dd');
+            
+            if (doctorId) {
+                // Doctor-first approach: Get dates when this doctor is available
+                const dates = await appointmentService.getDoctorAvailableDates(doctorId, startDate, endDate);
+                
+                if (dates && dates.length > 0) {
+                    setAvailableDates(dates);
+                } else {
+                    setAvailableDates([]);
+                    setDateWarning('No available dates found for the selected doctor.');
+                }
+            } else {
+                // Date-first approach: Get all available dates
+                const dates = await appointmentService.getAvailableDates(null, startDate, endDate);
+                
+                if (dates && dates.length > 0) {
+                    setAvailableDates(dates);
+                } else {
+                    setAvailableDates([]);
+                    setDateWarning('No available dates found for the selected period.');
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching available dates:', error);
+            setDateWarning('Failed to load available dates. Please try again later.');
+            setAvailableDates([]);
+        } finally {
+            setIsLoadingDates(false);
+        }
+    };
+    
+    // Function to fetch available time slots
+    const fetchAvailableTimeSlots = async (date, doctorId = null) => {
+        if (!date) return;
+        
+        setIsLoadingTimeSlots(true);
+        setTimeSlotWarning('');
+        try {
+            let timeSlots = [];
+            
+            if (doctorId) {
+                // Doctor-first approach: Get time slots for specific doctor on date
+                timeSlots = await appointmentService.getDoctorTimeSlots(doctorId, date);
+                
+                if (timeSlots && timeSlots.length > 0) {
+                    setAvailableSlots({ [doctorId]: timeSlots });
+                    console.log('Available slots for doctor:', timeSlots);
+                } else {
+                    setAvailableSlots({});
+                    setTimeSlotWarning('No time slots available for the selected doctor on this date.');
+                }
+            } else {
+                // Date-first approach: Get all time slots for the date
+                timeSlots = await appointmentService.getAvailableTimeSlots(date);
+                
+                if (timeSlots && timeSlots.length > 0) {
+                    // Transform for compatibility with existing UI code
+                    setAvailableSlots({ 'all': timeSlots });
+                    console.log('Available slots for date:', timeSlots);
+                } else {
+                    setAvailableSlots({});
+                    setTimeSlotWarning('No time slots available for the selected date.');
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching time slots:', error);
+            setTimeSlotWarning('Failed to load available time slots. Please try again.');
+            setAvailableSlots({});
+        } finally {
+            setIsLoadingTimeSlots(false);
         }
     };
 
@@ -1121,15 +1937,12 @@ const AppointmentCreation = () => {
         console.log('Selected time slot:', timeSlot);
         setSelectedTimeSlot(timeSlot);
         
-        // Clear doctor selection when time slot changes
+        // Clear doctor selection when time slot changes in date-first mode
+        if (isDayPriority === true) {
         setSelectedDoctor(null);
-        setAvailableDoctorsForTimeSlot([]);
-        
-        // We're removing this fetch call to prevent double-fetch
-        // The useEffect hook will handle the fetch when selectedTimeSlot changes
-        // if (isDayPriority === true) {
-        //     fetchAvailableDoctorsForTimeSlot();
-        // }
+            // The doctor fetching will be handled by the useEffect 
+            // that watches for selectedTimeSlot changes
+        }
     };
 
     // Handler for selecting a doctor
@@ -1141,23 +1954,21 @@ const AppointmentCreation = () => {
             return;
         }
         
-        // In Doctor First mode, the doctor selection triggers date fetching
-        if (isDayPriority === false) {
-            console.log('Doctor First mode: Doctor selected, will fetch available dates for this doctor');
+        const doctorId = doctor.id || doctor;
+        setSelectedDoctor(doctorId);
+        
+        // If we already have a date selected in doctor-first mode,
+        // we need to refresh the time slots for this doctor
+        if (isDayPriority === false && selectedDate) {
+            console.log('Doctor-first mode: Fetching time slots for selected doctor and date');
+            fetchAvailableTimeSlots(selectedDate, doctorId);
         }
         
-        // Store doctor in state
-        setSelectedDoctor(doctor.id || doctor); // Sometimes doctor is the full object, sometimes just the ID
-        
-        // Add debug info
-        console.log(`Doctor selected. Priority mode: ${isDayPriority}, Current step: ${currentStep}`);
-        console.log('Current state:', {
-            selectedDate,
-            selectedTimeSlot,
-            selectedDoctor: doctor.id || doctor,
-            availableDoctorsForSelection: availableDoctorsForSelection.length, 
-            availableDoctorsForTimeSlot: availableDoctorsForTimeSlot.length
-        });
+        // In Doctor First mode, the doctor selection triggers date fetching if we don't have dates yet
+        if (isDayPriority === false && (!availableDates || availableDates.length === 0)) {
+            console.log('Doctor First mode: Doctor selected, will fetch available dates for this doctor');
+            fetchAvailableDates(doctorId);
+        }
     };
 
     // Function to check if we can proceed to step 3
@@ -1169,37 +1980,31 @@ const AppointmentCreation = () => {
     // Effects to fetch data when dependencies change
     // Effect to fetch available dates and time slots when needed
     useEffect(() => {
-        if (currentStep === 2 || selectedDate) {
+        if (currentStep === 2 && selectedDate) {
             setIsLoadingSchedule(true);
             setDateWarning('');
             setTimeSlotWarning('');
             
-            fetchAvailableSlots()
-                .then(slots => {
-                    setAvailableSlots(slots || {});
-                    // If we got fallback data, show a notification
-                    if (slots && Object.keys(slots).length > 0 && slots[Object.keys(slots)[0]].isFallback) {
-                        setDateWarning('Using sample data while connecting to the server. This is for demonstration purposes only.');
-                        setTimeSlotWarning('Using sample time slots. This is for demonstration purposes only.');
-                    }
-                })
+            // Call our more specific time slot function instead of the generic fetchAvailableSlots
+            const doctorId = isDayPriority === false ? selectedDoctor : null;
+            fetchAvailableTimeSlots(selectedDate, doctorId)
                 .catch(error => {
-                    console.error('Error fetching slots:', error);
+                    console.error('Error fetching time slots:', error);
                     setError('Failed to load available time slots. Please try again.');
                     setDateWarning('Unable to connect to the server. Using sample data for demonstration.');
                     setTimeSlotWarning('Unable to load time slots from server. Using sample data.');
-                    setAvailableSlots({});
                 })
                 .finally(() => {
                     setIsLoadingSchedule(false);
                 });
-        } else {
-            // Clear slots when date is cleared
+        } else if (currentStep !== 2) {
+            // Clear slots when not on step 2
             setAvailableSlots({});
             setTimeSlotWarning('');
         }
     }, [currentStep, isDayPriority, selectedDoctor, selectedDate]);
 
+    // Effect to fetch doctors when timeSlot changes in date-first mode
     // Effect to fetch doctors when timeSlot changes (for date-first mode)
     useEffect(() => {
         if (currentStep !== 2 || isDayPriority !== true || !selectedDate || !selectedTimeSlot) return;
@@ -1213,7 +2018,25 @@ const AppointmentCreation = () => {
                     const doctors = await fetchAvailableDoctorsForTimeSlot();
                     
                 if (isMounted) {
-                        setAvailableDoctorsForTimeSlot(doctors || []);
+                    // Additional check - ensure all doctor objects have consistent fields
+                    // This is a safeguard in case our previous normalization didn't catch everything
+                    if (doctors && doctors.length > 0) {
+                        const properlyFormattedDoctors = doctors.map(doctor => ({
+                            id: doctor.id,
+                            firstName: doctor.firstName || doctor.first_name || '',
+                            lastName: doctor.lastName || doctor.last_name || '',
+                            specialization: doctor.specialization || 'Pediatrician',
+                            imageUrl: doctor.imageUrl || null,
+                            isFallback: doctor.isFallback || false
+                        }));
+                        
+                        console.log('Final formatted doctors:', properlyFormattedDoctors);
+                        setAvailableDoctorsForTimeSlot(properlyFormattedDoctors);
+                    } else {
+                        setAvailableDoctorsForTimeSlot([]);
+                        setDoctorWarning('No doctors available for this time slot');
+                    }
+                    
                         if (doctors && doctors.length > 0 && doctors[0].hasOwnProperty('isFallback')) {
                         setDoctorWarning('Using sample doctor data.');
                         }
@@ -1222,7 +2045,11 @@ const AppointmentCreation = () => {
                 if (isMounted) {
                         console.error('Error in doctor fetching effect:', error);
                     setDoctorWarning('Unable to load doctors from server.');
-                    setAvailableDoctorsForTimeSlot(appointmentService.generateFallbackDoctors(selectedTimeSlot));
+                    
+                    // Generate fallback doctors with proper formatting
+                    const fallbackDoctors = appointmentService.generateFallbackDoctors(selectedTimeSlot);
+                    console.log('Using fallback doctors:', fallbackDoctors);
+                    setAvailableDoctorsForTimeSlot(fallbackDoctors);
                     }
                 } finally {
                 if (isMounted) {
@@ -1244,7 +2071,32 @@ const AppointmentCreation = () => {
             setIsLoadingDoctors(true);
             // Use the appropriate method from appointmentService
             const response = await appointmentService.getAvailableDoctors();
-            return response || [];
+            
+            // Debug the raw doctor data
+            console.log('Raw doctor data from getAvailableDoctors API:', response);
+            
+            // Ensure all doctor objects have consistent fields
+            if (response && response.length > 0) {
+                const formattedDoctors = response.map(doctor => {
+                    console.log('Processing doctor for doctor-first approach:', doctor);
+                    
+                    // Create a normalized doctor object
+                    const normalizedDoctor = {
+                        id: doctor.id,
+                        firstName: doctor.firstName || doctor.first_name || doctor.fullName?.split(' ')[0] || doctor.full_name?.split(' ')[0] || doctor.name?.split(' ')[0] || doctor.doctorName?.split(' ')[0] || doctor.employeeName?.split(' ')[0] || '',
+                        lastName: doctor.lastName || doctor.last_name || (doctor.fullName?.split(' ').slice(1).join(' ')) || (doctor.full_name?.split(' ').slice(1).join(' ')) || (doctor.name?.split(' ').slice(1).join(' ')) || (doctor.doctorName?.split(' ').slice(1).join(' ')) || (doctor.employeeName?.split(' ').slice(1).join(' ')) || '',
+                        specialization: doctor.specialization || 'Pediatrician',
+                        imageUrl: doctor.imageUrl || null
+                    };
+                    
+                    console.log('Normalized doctor for doctor-first:', normalizedDoctor);
+                    return normalizedDoctor;
+                });
+                
+                return formattedDoctors;
+            }
+            
+            return [];
         } catch (error) {
             console.error('Error fetching doctors:', error);
             // Use fallback doctors if fetch failed
@@ -1294,99 +2146,339 @@ const AppointmentCreation = () => {
     // Update the appointment type selection handler
     const handleAppointmentTypeChange = (type) => {
         setAppointmentType(type);
+        // Clear selected vaccines when changing type
+        setSelectedVaccines([]);
+        // Set day priority based on type
         setIsDayPriority(type === 'NEW_VACCINE');
-        setSelectedVaccines([]); // Clear selected vaccines when changing type
+        // Reset payment method and invoice
+        setPaymentMethod('');
+        setInvoice(null);
+        setIsPrePaid(false);
+        // Clear any errors
+        setError('');
     };
 
-    // Add new render functions for different vaccine types
+    // Render available vaccines based on appointment type
     const renderAvailableVaccines = () => {
-        return childVaccineData.availableVaccines.map((vaccine, index) => (
-            <Col md={6} key={`new-${vaccine.id}-${index}`} className="mb-3">
+        if (isLoadingVaccineData) {
+            return (
+                <div className="text-center my-4">
+                    <Spinner animation="border" role="status">
+                        <span className="visually-hidden">Loading vaccines...</span>
+                    </Spinner>
+                    <p className="mt-2">Loading available vaccines...</p>
+                </div>
+            );
+        }
+
+        let vaccineList = [];
+        switch (appointmentType) {
+            case 'VACCINE_COMBO':
+                vaccineList = childVaccineData.vaccineCombos || [];
+                break;
+            case 'NEXT_DOSE':
+                vaccineList = childVaccineData.upcomingDoses || [];
+                break;
+            case 'NEW_VACCINE':
+                vaccineList = childVaccineData.availableVaccines || [];
+                break;
+            default:
+                return (
+                    <Alert variant="info">
+                        Please select an appointment type to view available vaccines.
+                    </Alert>
+                );
+        }
+
+        if (vaccineList.length === 0) {
+            return (
+                <Alert variant="info">
+                    No {appointmentType.toLowerCase().replace('_', ' ')}s available for this child.
+                </Alert>
+            );
+        }
+
+        // Debug output of available vaccines and current selections
+        console.log(`Rendering ${vaccineList.length} vaccines for type ${appointmentType}`, vaccineList);
+        console.log('Current selections:', selectedVaccines);
+
+        return (
+            <Row xs={1} md={2} lg={3} className="g-4">
+                {vaccineList.map((vaccine, index) => {
+                    // Generate a unique and safe key
+                    const vaccineId = vaccine.id || vaccine.doseScheduleId || vaccine.comboId || index;
+                    const safeKey = `${appointmentType}-${vaccineId}-${index}`;
+                    
+                    // Improved selection checking logic with debugging
+                    let isSelected = false;
+                    
+                    switch (appointmentType) {
+                        case 'NEW_VACCINE':
+                            isSelected = selectedVaccines.some(v => {
+                                const matches = v.type === 'NEW_VACCINE' && String(v.vaccineId) === String(vaccine.id);
+                                if (matches) console.log('Found matching NEW_VACCINE:', v, vaccine);
+                                return matches;
+                            });
+                            break;
+                        case 'NEXT_DOSE':
+                            const doseIdToCheck = vaccine.id || vaccine.doseScheduleId;
+                            isSelected = selectedVaccines.some(v => {
+                                const matches = v.type === 'NEXT_DOSE' && String(v.doseScheduleId) === String(doseIdToCheck);
+                                if (matches) console.log('Found matching NEXT_DOSE:', v, vaccine);
+                                return matches;
+                            });
+                            break;
+                        case 'VACCINE_COMBO':
+                            const comboIdToCheck = vaccine.id || vaccine.comboId;
+                            isSelected = selectedVaccines.some(v => {
+                                const matches = v.type === 'VACCINE_COMBO' && String(v.comboId) === String(comboIdToCheck);
+                                if (matches) console.log('Found matching VACCINE_COMBO:', v, vaccine);
+                                return matches;
+                            });
+                            break;
+                    }
+                    
+                    console.log(`Vaccine ${vaccine.id} (${vaccine.vaccineName || vaccine.name || 'Unknown'}) isSelected:`, isSelected);
+
+                    return (
+                        <Col key={safeKey}>
                 <Card 
-                    className={`h-100 ${selectedVaccines.some(v => v.vaccineId === vaccine.id) ? 'border-primary' : ''}`}
-                    onClick={() => handleVaccineSelection(vaccine, 'new')}
-                    style={{ cursor: 'pointer' }}
+                                className={`h-100 ${isSelected ? 'border-primary' : ''}`}
+                                style={{ 
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease',
+                                    borderWidth: isSelected ? '2px' : '1px',
+                                    boxShadow: isSelected ? '0 0 8px rgba(0,123,255,0.5)' : 'none',
+                                    transform: isSelected ? 'translateY(-2px)' : 'none'
+                                }}
+                                onClick={() => handleVaccineSelection(vaccine, !isSelected)}
                 >
                     <Card.Body>
-                        <div className="d-flex justify-content-between align-items-center mb-2">
-                            <h5 className="mb-0">{vaccine.name}</h5>
-                            <Badge bg="info">New</Badge>
-                        </div>
-                        <Card.Text className="text-muted small">{vaccine.description}</Card.Text>
-                        <div className="mt-2">
-                            <strong>Price: </strong>
-                            <span>${vaccine.price}</span>
-                        </div>
-                        <div className="mt-1">
-                            <strong>Doses Required: </strong>
-                            <span>{vaccine.dosage || 1}</span>
-                        </div>
+                                    <Card.Title>
+                                        {appointmentType === 'VACCINE_COMBO' 
+                                            ? (vaccine.comboName || vaccine.name)
+                                            : vaccine.name}
+                                        {isSelected && (
+                                            <Badge bg="success" className="ms-2">Selected</Badge>
+                                        )}
+                                    </Card.Title>
+                                    {appointmentType === 'VACCINE_COMBO' ? (
+                                        <>
+                                            <Card.Title style={{ fontSize: '1rem' }}>
+                                                {vaccine.comboName || vaccine.name || "Vaccine Combo"}
+                                            </Card.Title>
+                                            <div className="mt-2 mb-2">
+                                                <Badge bg="warning">Combo</Badge>
+                                                <Badge bg="info" className="ms-2">{vaccine.vaccines?.length || 0} vaccines</Badge>
+                                            </div>
+                                            <div className="mb-2">
+                                                <small className="text-muted">
+                                                    {vaccine.description || 'Combination of vaccines'}
+                                                </small>
+                                            </div>
+                                            <div className="mt-2">
+                                                <strong>Price: </strong>{formatCurrency(vaccine.price || 0)}
+                                            </div>
+                                            {vaccine.saleOff > 0 && (
+                                                <Badge bg="success" className="mt-1">
+                                                    Save {vaccine.saleOff}%
+                                                </Badge>
+                                            )}
+                                        </>
+                                    ) : appointmentType === 'NEXT_DOSE' ? (
+                                        <>
+                                            <Card.Title style={{ fontSize: '1rem' }}>
+                                                {vaccine.vaccineName || vaccine.vaccineOfChild?.vaccine?.name || vaccine.name || "Unknown Vaccine"}
+                                            </Card.Title>
+                                            <div className="mt-2 mb-2">
+                                                <Badge bg="info">Dose {vaccine.doseNumber || 1}</Badge>
+                                            </div>
+                                            <div className="mb-2">
+                                                <small className="text-muted">
+                                                    <strong>Schedule:</strong> {vaccine.scheduledDate ? 
+                                                        new Date(vaccine.scheduledDate).toLocaleDateString() : 
+                                                        'Not scheduled'}
+                                                </small>
+                                            </div>
+                                            <div className="mt-2">
+                                                {vaccine.isPaid ? (
+                                                    <Badge bg="success" style={{ fontSize: '0.9rem', padding: '0.4rem' }}>PAID</Badge>
+                                                ) : (
+                                                    <><strong>Price: </strong>{formatCurrency(vaccine.price || 0)}</>
+                                                )}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Card.Title style={{ fontSize: '1rem' }}>
+                                                {vaccine.name || "Unknown Vaccine"}
+                                            </Card.Title>
+                                            <div className="mt-2 mb-2">
+                                                <Badge bg="primary">New Vaccine</Badge>
+                                                {vaccine.doseNumber && (
+                                                    <Badge bg="info" className="ms-2">Dose {vaccine.doseNumber}</Badge>
+                                                )}
+                                            </div>
+                                            <div className="mb-2">
+                                                <small className="text-muted">
+                                                    {vaccine.description || 'No description available'}
+                                                </small>
+                                            </div>
+                                            <div className="mt-2">
+                                                <strong>Price: </strong>{formatCurrency(vaccine.price || 0)}
+                                            </div>
+                                        </>
+                                    )}
                     </Card.Body>
                 </Card>
             </Col>
-        ));
+                    );
+                })}
+            </Row>
+        );
     };
 
     const renderUpcomingDoses = () => {
-        return childVaccineData.upcomingDoses.map((dose, index) => (
-            <Col md={6} key={`dose-${dose.id}-${index}`} className="mb-3">
-                <Card 
-                    className={`h-100 ${selectedVaccines.some(v => v.doseScheduleId === dose.id) ? 'border-primary' : ''}`}
-                    onClick={() => handleVaccineSelection(dose, 'next')}
-                    style={{ cursor: 'pointer' }}
-                >
-                    <Card.Body>
-                        <div className="d-flex justify-content-between align-items-center mb-2">
-                            <h5 className="mb-0">{dose.vaccine.name}</h5>
-                            <Badge bg="warning">Next Dose</Badge>
+        console.log("Rendering upcoming doses:", childVaccineData.upcomingDoses);
+        
+        if (!childVaccineData.upcomingDoses || childVaccineData.upcomingDoses.length === 0) {
+            return (
+                <Alert variant="info" className="mt-3">
+                    No upcoming doses scheduled for this child.
+                </Alert>
+            );
+        }
+        
+        return (
+            <div className="row g-3">
+                {childVaccineData.upcomingDoses.map((dose, index) => {
+                    // Get values directly from the dose object with better error handling
+                    const vaccineName = dose.vaccineName || dose.vaccineOfChild?.vaccine?.name || "Unknown Vaccine";
+                    const doseNumber = dose.doseNumber || 1;
+                    const totalDoses = dose.totalDoses || 4;
+                    
+                    // Format the scheduled date nicely
+                    const scheduledDate = dose.scheduledDate ? 
+                        new Date(dose.scheduledDate).toLocaleDateString() : 
+                        'Not scheduled';
+                    
+                    // Get paid status
+                    const isPaid = dose.isPaid === true;
+                    
+                    // Format price if needed
+                    const price = dose.price || 0;
+                    const formattedPrice = formatCurrency(price);
+                    
+                    // Check if this dose is selected in the current selection
+                    const isSelected = selectedVaccines.some(v => 
+                        v.type === 'NEXT_DOSE' && 
+                        (v.doseScheduleId === String(dose.id) || v.doseScheduleId === dose.id)
+                    );
+                    
+                    return (
+                        <div className="col-md-6 mb-3" key={`dose-${dose.id || index}`}>
+                            <div 
+                                className={`border rounded p-3 h-100 ${isSelected ? 'border-primary border-2' : 'border-1'}`}
+                                onClick={() => handleVaccineSelection(dose, !isSelected)}
+                                style={{ 
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease',
+                                    transform: isSelected ? 'translateY(-2px)' : 'none',
+                                    boxShadow: isSelected ? '0 4px 8px rgba(0,0,0,0.1)' : 'none'
+                                }}
+                            >
+                                <div className="d-flex justify-content-between align-items-start mb-2">
+                                    <h5 className="mt-0 mb-0">{vaccineName}</h5>
+                                    {isSelected && <Badge bg="success">Selected</Badge>}
+                                </div>
+                                
+                                <div className="mt-2 mb-2">
+                                    <Badge bg="info">Dose {doseNumber} of {totalDoses}</Badge>
+                                    {dose.isFromCombo && <Badge bg="warning" className="ms-2">From Combo</Badge>}
+                                </div>
+                                
+                                <div className="mb-2">
+                                    <small>
+                                        <strong>Scheduled Date: </strong>{scheduledDate}
+                                    </small>
+                                </div>
+                                
+                                <div className="mt-3">
+                                    {isPaid ? (
+                                        <div className="bg-success text-white p-2 text-center rounded">PAID</div>
+                                    ) : (
+                                        <div>
+                                            <strong>Price: </strong>{formattedPrice}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
-                        <Card.Text className="text-muted small">
-                            Dose {dose.doseNumber} of {dose.totalDoses}
-                        </Card.Text>
-                        <div className="mt-2">
-                            <strong>Due Date: </strong>
-                            <span>{formatDate(dose.dueDate)}</span>
-                        </div>
-                        <div className="mt-1">
-                            <strong>Price: </strong>
-                            <span>${dose.vaccine.price}</span>
-                        </div>
-                    </Card.Body>
-                </Card>
-            </Col>
-        ));
+                    );
+                })}
+            </div>
+        );
     };
 
     const renderVaccineCombos = () => {
-        return childVaccineData.vaccineCombos.map((combo, index) => (
-            <Col md={6} key={`combo-${combo.comboId}-${index}`} className="mb-3">
+        return childVaccineData.vaccineCombos.map((combo, index) => {
+            const isSelected = selectedVaccines.some(v => 
+                v.comboId === (combo.id || combo.comboId)?.toString()
+            );
+            
+            // Debug logs to ensure we have complete data
+            console.log(`Rendering combo ${combo.comboName || combo.name}:`, combo);
+            const hasVaccines = combo.vaccines && combo.vaccines.length > 0;
+            
+            return (
+                <Col md={6} key={`combo-${combo.id || combo.comboId || index}-${index}`} className="mb-3">
                 <Card 
-                    className={`h-100 ${selectedVaccines.some(v => v.comboId === combo.comboId) ? 'border-primary' : ''}`}
-                    onClick={() => handleVaccineSelection(combo, 'combo')}
-                    style={{ cursor: 'pointer' }}
+                        className={`h-100 ${isSelected ? 'border-primary' : ''}`}
+                        onClick={() => handleVaccineSelection(combo, !isSelected)}
+                        style={{ 
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            borderWidth: isSelected ? '2px' : '1px'
+                        }}
                 >
                     <Card.Body>
                         <div className="d-flex justify-content-between align-items-center mb-2">
-                            <h5 className="mb-0">{combo.comboName}</h5>
+                                <h5 className="mb-0">{combo.comboName || combo.name}</h5>
                             <Badge bg="info">Combo</Badge>
                         </div>
                         
                         <Card.Text className="text-muted small mb-3">{combo.description}</Card.Text>
                         
+                        {hasVaccines ? (
+                            <>
+                                <h6 className="mb-2">Included Vaccines:</h6>
                         <ListGroup variant="flush" className="mb-3">
                             {combo.vaccines.map((vaccine, vIndex) => (
-                                <ListGroup.Item key={vIndex}>
-                                    {vaccine.vaccineName}
+                                        <ListGroup.Item key={`${combo.id}-vaccine-${vIndex}`} className="py-2">
+                                            <div className="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <strong>{vaccine.vaccineName || vaccine.name}</strong>
                                     <small className="text-muted d-block">
-                                        {vaccine.totalDose} dose{vaccine.totalDose > 1 ? 's' : ''}
+                                                        {vaccine.totalDose || vaccine.doseNumber || 1} dose{(vaccine.totalDose || vaccine.doseNumber || 1) > 1 ? 's' : ''}
                                     </small>
+                                                </div>
+                                                {vaccine.price && (
+                                                    <Badge bg="secondary">${vaccine.price}</Badge>
+                                                )}
+                                            </div>
                                 </ListGroup.Item>
                             ))}
                         </ListGroup>
+                            </>
+                        ) : (
+                            <Card.Text className="text-muted small mb-3">
+                                Vaccine details not available
+                            </Card.Text>
+                        )}
                         
-                        <div className="mt-2">
-                            <strong>Total Price: </strong>
-                            <span>${combo.price}</span>
+                        <div className="d-flex justify-content-between align-items-center mt-2">
+                            <strong>Total Price:</strong>
+                            <h5 className="mb-0 text-primary">${combo.price}</h5>
                         </div>
                         
                         {combo.saleOff > 0 && (
@@ -1397,8 +2489,272 @@ const AppointmentCreation = () => {
                     </Card.Body>
                 </Card>
             </Col>
-        ));
+            );
+        });
     };
+
+    // Update available doctors when time slot changes in date-first mode
+    useEffect(() => {
+        if (currentStep === 2 && isDayPriority === true && selectedDate && selectedTimeSlot) {
+            fetchAvailableDoctorsForTimeSlot();
+        }
+    }, [selectedDate, selectedTimeSlot]);
+    
+    // Fetch available dates when priority mode is selected
+    useEffect(() => {
+        if (currentStep === 2 && isDayPriority !== null) {
+            const doctorId = isDayPriority === false ? selectedDoctor : null;
+            fetchAvailableDates(doctorId);
+        }
+    }, [currentStep, isDayPriority, selectedDoctor]);
+
+    // Format hourly slot for display (e.g., "8-9" to "08:00-09:00")
+    const formatTimeSlot = (slot) => {
+        if (!slot) return '';
+        const [start, end] = slot.split('-');
+        const startTime = `${start.padStart(2, '0')}:00`;
+        const endTime = `${end.padStart(2, '0')}:00`;
+        return `${startTime}-${endTime}`;
+    };
+
+    // Check if child and vaccine can be vaccinated
+    const canBeVaccinated = (vaccine) => {
+        // Your implementation here
+        return true; // This is a placeholder
+    };
+
+    // Add this helper function to calculate the total invoice amount
+    const calculateInvoiceTotal = () => {
+        let total = 0;
+        
+        // Calculate total cost based on selected vaccines/doses
+        if (selectedVaccines && selectedVaccines.length > 0) {
+            selectedVaccines.forEach(vaccine => {
+                if (vaccine.type === 'VACCINE_COMBO') {
+                    // For vaccine combos, use the combo price
+                    total += vaccine.price || 0;
+                } else if (vaccine.type === 'NEW_VACCINE') {
+                    // For new vaccines, use the vaccine price
+                    total += vaccine.price || 0;
+                } else if (vaccine.type === 'NEXT_DOSE') {
+                    // For next doses, check if it's already paid first
+                    if (!vaccine.isPaid) {
+                        total += vaccine.vaccineOfChild?.vaccine?.price || 0;
+                    }
+                }
+            });
+        }
+        
+        return total;
+    };
+
+    // Add new function to handle redirect from payment gateway
+    useEffect(() => {
+        // Check if we're returning from a payment gateway
+        const query = new URLSearchParams(window.location.search);
+        const partnerCode = query.get('partnerCode');
+        const orderId = query.get('orderId');
+        const requestId = query.get('requestId');
+        const amount = query.get('amount');
+        const orderInfo = query.get('orderInfo');
+        
+        // If we have these parameters, we're returning from MoMo payment
+        if (partnerCode && orderId) {
+            console.log('Detected return from MoMo payment gateway:', {
+                partnerCode,
+                orderId,
+                requestId,
+                amount,
+                orderInfo
+            });
+            
+            // Extract appointment ID from URL parameters, orderInfo, or sessionStorage
+            // First try the direct appointmentId parameter
+            let appointmentId = query.get('appointmentId');
+            
+            // If not available, try to extract from orderInfo (usually contains "Payment for appointment #X")
+            if (!appointmentId && orderInfo) {
+                const matches = orderInfo.match(/appointment\s+#(\d+)/i);
+                if (matches && matches[1]) {
+                    appointmentId = matches[1];
+                    console.log('Extracted appointmentId from orderInfo:', appointmentId);
+                }
+            }
+            
+            // If still not available, try extraData
+            if (!appointmentId) {
+                const extraData = query.get('extraData');
+                if (extraData && extraData.trim() !== '') {
+                    // Try to parse as JSON first
+                    try {
+                        const extraDataObj = JSON.parse(extraData);
+                        if (extraDataObj.appointmentId) {
+                            appointmentId = extraDataObj.appointmentId;
+                            console.log('Extracted appointmentId from extraData JSON:', appointmentId);
+                        }
+                    } catch (e) {
+                        // If not JSON, just use the extraData if it looks like a number
+                        if (!isNaN(extraData)) {
+                            appointmentId = extraData;
+                            console.log('Using extraData as appointmentId:', appointmentId);
+                        }
+                    }
+                }
+            }
+            
+            // If we still don't have an appointmentId, check sessionStorage
+            if (!appointmentId) {
+                const pendingPayment = sessionStorage.getItem('pendingPayment');
+                if (pendingPayment) {
+                    try {
+                        const paymentData = JSON.parse(pendingPayment);
+                        appointmentId = paymentData.appointmentId;
+                        console.log('Retrieved appointmentId from sessionStorage:', appointmentId);
+                    } catch (e) {
+                        console.error('Error parsing pending payment data', e);
+                    }
+                }
+            }
+            
+            // Get resultCode to determine success/failure (0 = success)
+            const resultCode = query.get('resultCode');
+            const isSuccess = resultCode === '0';
+            console.log('Payment result:', isSuccess ? 'SUCCESS' : 'FAILURE', 'resultCode:', resultCode);
+            
+            // Clear URL parameters without refreshing the page
+            window.history.replaceState({}, document.title, '/appointment-creation');
+            
+            if (appointmentId) {
+                console.log('Processing payment result for appointment:', appointmentId);
+                setCreatedAppointmentId(appointmentId);
+                setCurrentStep(4); // Always go to step 4
+                
+                if (isSuccess) {
+                    // Success message regardless of API call outcome
+                    setSuccess("Payment completed successfully! Your appointment is confirmed.");
+                    setIsSuccess(true);
+                    
+                    // Explicitly call the backend to mark appointment as paid
+                    appointmentService.markAppointmentAsPaid(appointmentId)
+                        .then(result => {
+                            console.log('Appointment marked as paid successfully:', result);
+                            
+                            // After successful payment marking, fetch the updated appointment data
+                            // with a slight delay to ensure backend has processed everything
+                            setTimeout(() => {
+                                refreshAppointmentData(appointmentId);
+                            }, 1000);
+                        })
+                        .catch(err => {
+                            console.error('Error marking appointment as paid:', err);
+                            // Even if marking as paid fails, still try to fetch the appointment data
+                            refreshAppointmentData(appointmentId);
+                        });
+                } else {
+                    // Failure message but still show the appointment was created
+                    setError("Payment was not completed. You can pay at the clinic.");
+                    setSuccess("Appointment created successfully! You will need to pay at the clinic.");
+                    setIsSuccess(true);
+                    
+                    // Still load appointment data for display
+                    refreshAppointmentData(appointmentId);
+                }
+            } else {
+                console.error('Could not determine appointmentId from MoMo redirect');
+                setError("Payment was processed but we couldn't identify your appointment. Please contact support with this reference: " + orderId);
+            }
+        }
+    }, []);
+    
+    // Helper function to fetch and update appointment data
+    const refreshAppointmentData = (appointmentId) => {
+        console.log('Refreshing appointment data for ID:', appointmentId);
+        
+        appointmentService.getAppointmentById(appointmentId)
+            .then(data => {
+                console.log('Loaded appointment data:', data);
+                // Update component state with appointment details
+                if (data && !data.error) {
+                    // Set the invoice data for display in step 4
+                    setInvoice({
+                        id: data.id,
+                        childId: data.childId,
+                        childName: data.childName,
+                        doctorId: data.doctorId,
+                        doctorName: data.doctorName,
+                        appointmentTime: data.appointmentTime,
+                        timeSlot: data.timeSlot,
+                        status: data.status,
+                        isPaid: data.isPaid,
+                        totalAmount: data.totalAmount,
+                        paymentId: data.paymentId,
+                        paymentStatus: data.paymentStatus,
+                        paymentMethod: data.paymentMethod,
+                        transactionId: data.transactionId,
+                        paymentDate: data.paymentDate,
+                        appointmentVaccines: data.appointmentVaccines
+                    });
+                    
+                    // Update selected vaccines if they're NEXT_DOSE and we have payment info
+                    if (appointmentType === 'NEXT_DOSE' && data.isPaid && selectedVaccines && selectedVaccines.length > 0) {
+                        // Mark all selected vaccines as paid
+                        setSelectedVaccines(prev => 
+                            prev.map(vaccine => ({
+                                ...vaccine,
+                                isPaid: true
+                            }))
+                        );
+                        
+                        // Refresh child vaccine data to get updated status from server
+                        if (selectedChild) {
+                            // We'll use a slight delay to ensure backend has finished processing
+                            setTimeout(() => {
+                                fetchChildVaccineData();
+                            }, 1000);
+                        }
+                    }
+                    
+                    setIsSuccess(true);
+                } else {
+                    console.error('Failed to load appointment data:', data);
+                    // Still set success state to avoid stuck in loading
+                    setIsSuccess(true);
+                }
+            })
+            .catch(err => {
+                console.error('Error fetching appointment data:', err);
+                // Even on error, set success state to avoid stuck in loading
+                setIsSuccess(true);
+            });
+    };
+
+    // Load child vaccine data when child and appointment type are selected
+    useEffect(() => {
+        if (selectedChild && appointmentType && currentStep === 1) {
+            fetchChildVaccineData();
+        }
+    }, [selectedChild, appointmentType, currentStep]);
+
+    // Set a timeout to force showing success after 10 seconds if still loading
+    // in case the loading screen gets stuck
+    useEffect(() => {
+        if (currentStep === 4 && !isSuccess) {
+            console.log('Setting up success timeout for step 4');
+            const timer = setTimeout(() => {
+                console.log('Loading timeout reached, forcing success state');
+                setIsSuccess(true);
+            }, 10000); // 10 seconds timeout
+            
+            return () => clearTimeout(timer);
+        }
+    }, [currentStep, isSuccess]);
+
+    useEffect(() => {
+        // Initialize timeSlots when a date is selected
+        if (selectedDate) {
+            fetchAvailableTimeSlots(selectedDate);
+        }
+    }, [selectedDate]);
 
     return (
         <div className="appointment-creation-page">
@@ -1435,7 +2791,35 @@ const AppointmentCreation = () => {
                         {renderNavButtons()}
                     </Card.Body>
                 </Card>
+                
+                {/* Payment Modal */}
+                {createdAppointmentId && (
+                    <PaymentModal
+                        open={paymentModalOpen}
+                        onClose={handlePaymentModalClose}
+                        appointmentId={createdAppointmentId}
+                        amount={calculateInvoiceTotal()}
+                        onSuccess={handlePaymentSuccess}
+                        onFailure={handlePaymentFailure}
+                        redirectUrl={`${window.location.origin}/appointment-creation?paymentStatus=success&appointmentId=${createdAppointmentId}`}
+                        cancelUrl={`${window.location.origin}/appointment-creation?paymentStatus=cancelled&appointmentId=${createdAppointmentId}`}
+                        failureUrl={`${window.location.origin}/appointment-creation?paymentStatus=failed&appointmentId=${createdAppointmentId}`}
+                    />
+                )}
             </Container>
+            
+            {/* Add Toast Container for notifications */}
+            <ToastContainer 
+                position="top-right"
+                autoClose={5000}
+                hideProgressBar={false}
+                newestOnTop={true}
+                closeOnClick
+                rtl={false}
+                pauseOnFocusLoss
+                draggable
+                pauseOnHover
+            />
         </div>
     );
 };

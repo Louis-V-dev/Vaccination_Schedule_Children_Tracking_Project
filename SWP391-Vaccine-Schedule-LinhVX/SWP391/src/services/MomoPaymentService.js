@@ -1,4 +1,5 @@
 import axios from 'axios';
+import appointmentService from './appointmentService';
 
 const API_URL = 'http://localhost:8080/api/payments/momo';
 
@@ -32,140 +33,123 @@ class MomoPaymentService {
      * @param {string} paymentData.requestType Payment method: captureWallet, payWithATM, payWithCC, payWithMoMo (optional)
      * @returns {Promise<Object>} Payment response from MoMo
      */
-    createPayment(paymentData) {
+    async createPayment(paymentData) {
         try {
             console.log('Creating MoMo payment with data:', paymentData);
             
-            // Add returnUrl if not provided
-            if (!paymentData.returnUrl) {
-                paymentData.returnUrl = window.location.origin + '/payment/result';
-            }
+            // Extract appointment ID from extraData if available
+            const appointmentId = paymentData.extraData;
+            let response;
             
-            // Set default requestType if not provided
-            if (!paymentData.requestType) {
-                paymentData.requestType = 'captureWallet';
-            }
-            
-            return axios.post('/api/payments/momo/create', paymentData, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+            // If we have an appointment ID, use the appointment service
+            if (appointmentId) {
+                console.log('Creating payment for appointment:', appointmentId);
+                
+                // Create the payment request
+                const paymentRequest = {
+                    amount: paymentData.amount,
+                    orderInfo: paymentData.orderInfo || `Payment for appointment #${appointmentId}`,
+                    extraData: appointmentId,
+                    returnUrl: paymentData.returnUrl || window.location.origin + '/payment/status',
+                    requestType: paymentData.requestType || 'captureWallet',
+                    // This is the critical part - we need to explicitly set the appointmentId
+                    appointmentId: appointmentId
+                };
+                
+                console.log('Payment request data:', paymentRequest);
+                
+                // Use direct API endpoint with proper headers
+                response = await axios.post(`${API_URL}/create`, paymentRequest, {
+                    headers: getAuthHeaders()
+                });
+                
+                console.log('Direct payment creation response:', response.data);
+                
+                // Extract the payment URL - this is critical
+                let payUrl = null;
+                
+                // Handle different response formats - payUrl might be at different locations based on MoMo API response
+                if (response.data) {
+                    // Check if payUrl is directly in response.data
+                    if (response.data.payUrl) {
+                        payUrl = response.data.payUrl;
+                    }
+                    // Check if payUrl is in response.data.result (nested)
+                    else if (response.data.result && response.data.result.payUrl) {
+                        payUrl = response.data.result.payUrl;
+                    }
+                    // Check if the entire response.data is an URL string
+                    else if (typeof response.data === 'string' && response.data.startsWith('http')) {
+                        payUrl = response.data;
+                    }
+                    
+                    console.log('Extracted payment URL:', payUrl);
+                    
+                    // Format the response
+                    return {
+                        resultCode: 0,
+                        payUrl: payUrl,
+                        qrCodeUrl: response.data.qrCodeUrl || (response.data.result && response.data.result.qrCodeUrl),
+                        orderId: response.data.orderId || (response.data.result && response.data.result.orderId) || `MOMO${Date.now()}`,
+                        message: 'Success'
+                    };
                 }
-            })
-            .then(response => {
-                console.log('Raw payment creation response:', response.data);
+            } else {
+                // For standalone payments (not tied to appointments)
+                // Add returnUrl if not provided
+                if (!paymentData.returnUrl) {
+                    paymentData.returnUrl = window.location.origin + '/payment/status';
+                }
+                
+                // Set default requestType if not provided
+                if (!paymentData.requestType) {
+                    paymentData.requestType = 'captureWallet';
+                }
+                
+                // Use direct API endpoint
+                response = await axios.post(`${API_URL}/create`, paymentData, {
+                    headers: getAuthHeaders()
+                });
+                
+                console.log('Direct payment creation response:', response.data);
+                
+                // Extract the payment URL
+                let payUrl = null;
                 
                 // Handle different response formats
                 if (response.data) {
-                    // If the response is in the format: {code: number, message: string, data: object}
-                    if (response.data.code !== undefined) {
-                        console.log('Backend controller response:', response.data);
-                        
-                        // Check if success (code 0 or 1000 or 100)
-                        if (response.data.code === 0 || response.data.code === 1000 || response.data.code === 100) {
-                            // Extract data from the response
-                            const result = response.data.data || response.data.result || {};
-                            
-                            // Construct a standard response format
-                            return {
-                                resultCode: response.data.code === 100 ? 100 : 0, // Preserve code 100 for compatibility
-                                qrCodeUrl: result.qrCodeUrl || result.qrCode || response.data.qrCodeUrl || response.data.qrCode,
-                                qrCode: result.qrCodeUrl || result.qrCode || response.data.qrCodeUrl || response.data.qrCode,
-                                payUrl: result.payUrl || response.data.payUrl,
-                                orderId: result.orderId || response.data.orderId || ("MOMO" + Date.now()),
-                                message: response.data.message || 'Success'
-                            };
-                        } else {
-                            // Error response
-                            return {
-                                resultCode: response.data.code,
-                                message: response.data.message || 'Error in payment creation',
-                                orderId: null
-                            };
-                        }
+                    // Check if payUrl is directly in response.data
+                    if (response.data.payUrl) {
+                        payUrl = response.data.payUrl;
+                    }
+                    // Check if payUrl is in response.data.result (nested)
+                    else if (response.data.result && response.data.result.payUrl) {
+                        payUrl = response.data.result.payUrl;
+                    }
+                    // Check if the entire response.data is an URL string
+                    else if (typeof response.data === 'string' && response.data.startsWith('http')) {
+                        payUrl = response.data;
                     }
                     
-                    // If response is directly a MoMo response with resultCode
-                    if (response.data.resultCode !== undefined) {
-                        console.log('Direct MoMo response:', response.data);
-                        
-                        // Ensure qrCode and qrCodeUrl are the same (for compatibility)
-                        if (response.data.qrCodeUrl && !response.data.qrCode) {
-                            response.data.qrCode = response.data.qrCodeUrl;
-                        } else if (response.data.qrCode && !response.data.qrCodeUrl) {
-                            response.data.qrCodeUrl = response.data.qrCode;
-                        }
-                        
-                        return response.data;
-                    }
+                    console.log('Extracted payment URL:', payUrl);
                     
-                    // If response is wrapped in a result property
-                    if (response.data.result) {
-                        console.log('Wrapped payment creation response:', response.data.result);
-                        
-                        // Ensure qrCode and qrCodeUrl are the same (for compatibility)
-                        if (response.data.result.qrCodeUrl && !response.data.result.qrCode) {
-                            response.data.result.qrCode = response.data.result.qrCodeUrl;
-                        } else if (response.data.result.qrCode && !response.data.result.qrCodeUrl) {
-                            response.data.result.qrCodeUrl = response.data.result.qrCode;
-                        }
-                        
-                        return response.data.result;
-                    }
-                    
-                    // If response has direct properties for QR code
-                    if (response.data.qrCodeUrl || response.data.qrCode) {
-                        console.log('Backend response with QR code:', response.data);
-                        
-                        // Ensure both properties exist for compatibility
-                        const qrCodeUrl = response.data.qrCodeUrl || response.data.qrCode;
-                        
-                        // Map to expected format
-                        return {
-                            resultCode: 0,  // Assuming success if QR code is present
-                            qrCodeUrl: qrCodeUrl,
-                            qrCode: qrCodeUrl,
-                            orderId: response.data.orderId,
-                            payUrl: response.data.payUrl,
-                            message: response.data.message || 'Success'
-                        };
-                    }
+                    // Format the response
+                    return {
+                        resultCode: 0,
+                        payUrl: payUrl,
+                        qrCodeUrl: response.data.qrCodeUrl || (response.data.result && response.data.result.qrCodeUrl),
+                        orderId: response.data.orderId || (response.data.result && response.data.result.orderId) || `MOMO${Date.now()}`,
+                        message: 'Success'
+                    };
                 }
-                
-                console.error('Invalid response format:', response.data);
-                throw new Error('Invalid response format');
-            })
-            .catch(error => {
-                // Look for specific error types and provide better error messages
-                let errorMessage = 'Failed to create payment';
-                
-                if (error instanceof TypeError && error.message.includes('Image is not a constructor')) {
-                    errorMessage = 'Error loading QR code - will use redirect payment instead';
-                    console.warn('Image constructor not available, using fallback payment method');
-                } else {
-                    console.error('Error creating payment:', error.response?.data || error.message);
-                }
-                
-                return {
-                    resultCode: 99,
-                    message: errorMessage,
-                    orderId: null
-                };
-            });
-        } catch (error) {
-            // Look for specific error types and provide better error messages
-            let errorMessage = 'Unexpected error occurred';
-            
-            if (error instanceof TypeError && error.message.includes('Image is not a constructor')) {
-                errorMessage = 'Error loading QR code - will use redirect payment instead';
-                console.warn('Image constructor not available, using fallback payment method');
-            } else {
-                console.error('Unexpected error in createPayment:', error);
             }
             
+            throw new Error('Invalid response from payment service');
+        } catch (error) {
+            console.error('Error creating payment:', error);
             return {
                 resultCode: 99,
-                message: errorMessage,
+                message: error.response?.data?.message || error.message || 'Failed to create payment',
                 orderId: null
             };
         }
@@ -176,104 +160,138 @@ class MomoPaymentService {
      * @param {string} orderId Order ID to check
      * @returns {Promise<Object>} Payment status response
      */
-    checkPaymentStatus(orderId) {
+    async checkPaymentStatus(orderId) {
         try {
-            if (!orderId) {
-                console.error('Invalid order ID provided');
-                return Promise.resolve({
-                    resultCode: 98,
-                    message: 'Invalid order ID',
-                    orderId: orderId
-                });
+            // Use appointmentService to check payment status
+            return await appointmentService.checkPaymentStatus(orderId);
+        } catch (error) {
+            console.error('Error checking payment status:', error);
+            return {
+                resultCode: 99,
+                message: error.message || 'Failed to check payment status',
+                orderId: orderId
+            };
+        }
+    }
+
+    /**
+     * Debug method to test MoMo API directly
+     * This can help identify exactly what the backend is returning
+     */
+    async debugDirectMomoAPI(appointmentId, requestType = 'payWithCC') {
+        try {
+            console.log('Debug MoMo API for appointment:', appointmentId);
+            
+            // Create a test payment request with minimal data
+            const testPaymentRequest = {
+                appointmentId: appointmentId,
+                amount: 10000, // Test with a small amount
+                orderInfo: `Test payment for appointment #${appointmentId}`,
+                extraData: appointmentId.toString(),
+                returnUrl: window.location.origin + '/payment/status',
+                requestType: requestType
+            };
+            
+            console.log('Debug payment request:', testPaymentRequest);
+            
+            // Make direct API call
+            const response = await axios.post(`${API_URL}/create`, testPaymentRequest, {
+                headers: getAuthHeaders()
+            });
+            
+            // Log the entire raw response
+            console.log('Debug - Raw MoMo API response:', response);
+            console.log('Debug - Response data:', response.data);
+            console.log('Debug - Response status:', response.status);
+            
+            // Check for nested response structures
+            if (response.data && response.data.result) {
+                console.log('Debug - Nested result:', response.data.result);
             }
             
-            console.log('Checking payment status for order:', orderId);
+            // Look for payUrl in different places
+            const possiblePayUrlLocations = [
+                response.data?.payUrl,
+                response.data?.result?.payUrl,
+                typeof response.data === 'string' ? response.data : null
+            ];
             
-            return axios.get(`/api/payments/momo/status/${orderId}`, {
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                // Increase timeout to avoid quick failures
-                timeout: 10000
-            })
-            .then(response => {
-                // Check if we have a valid response structure
-                if (response.data) {
-                    // Handle the direct response format from the backend
-                    // The backend returns {code: number, message: string, result: object}
-                    if (response.data.code !== undefined) {
-                        console.log('Backend response with code:', response.data);
-                        
-                        // Map the response to the expected format
-                        if (response.data.code === 0) {
-                            // Successfully completed payment
-                            return {
-                                resultCode: 0,
-                                message: response.data.message,
-                                orderId: orderId
-                            };
-                        } else if (response.data.code === 1000) {
-                            // Payment is pending/processing
-                            return {
-                                resultCode: 1,
-                                message: response.data.message || 'Payment is being processed',
-                                orderId: orderId
-                            };
-                        } else {
-                            // Other response codes
-                            return {
-                                resultCode: response.data.code,
-                                message: response.data.message,
-                                orderId: orderId
-                            };
-                        }
-                    }
-                    
-                    // Also handle the previous success/result format if it exists
-                    if (response.data.success && response.data.result) {
-                        console.log('Payment status response:', response.data.result);
-                        return response.data.result;
-                    } else if (response.data.error) {
-                        // Handle error response from API
-                        console.warn('API returned error:', response.data.error);
-                        return {
-                            resultCode: 97,
-                            message: response.data.error || 'Error checking payment status',
-                            orderId: orderId
-                        };
-                    }
-                }
-                
-                console.warn('Invalid response format from status API:', response.data);
-                return {
-                    resultCode: 96,
-                    message: 'Invalid response format',
-                    orderId: orderId
-                };
-            })
-            .catch(error => {
-                // Detailed error logging
-                console.error('Error checking payment status:', error.message);
-                if (error.response) {
-                    console.error('Response data:', error.response.data);
-                    console.error('Response status:', error.response.status);
-                }
-                
-                // Return formatted error for frontend to handle
-                return {
-                    resultCode: 95,
-                    message: error.response?.data?.message || 'Failed to check payment status',
-                    orderId: orderId,
-                    error: error.message
-                };
-            });
+            console.log('Debug - Possible payUrl locations:', possiblePayUrlLocations);
+            
+            return {
+                rawResponse: response.data,
+                payUrlAttempts: possiblePayUrlLocations,
+                foundPayUrl: possiblePayUrlLocations.find(url => url && typeof url === 'string' && url.startsWith('http'))
+            };
         } catch (error) {
-            console.error('Unexpected error in checkPaymentStatus:', error);
-            return Promise.resolve({
-                resultCode: 94,
-                message: 'Unexpected error occurred',
-                orderId: orderId
+            console.error('Debug - Error calling MoMo API:', error);
+            return {
+                error: error.message,
+                responseData: error.response?.data,
+                responseStatus: error.response?.status
+            };
+        }
+    }
+
+    /**
+     * Test direct MoMo API integration based on official documentation
+     * This adds all the required MoMo parameters that may be missing in the current implementation
+     */
+    async testDirectMomoAPI(paymentOptions = {}) {
+        try {
+            console.log('Testing direct MoMo API integration');
+            
+            // Create request data following MoMo documentation format
+            const requestId = `MOMO${Date.now()}`;
+            const orderId = requestId;
+            
+            // Prepare payment request data
+            const directRequest = {
+                // Standard MoMo API parameters
+                partnerCode: 'MOMO', // This should be your actual partner code in production
+                accessKey: 'F8BBA842ECF85', // Example from docs - use your actual key
+                requestId: requestId,
+                amount: paymentOptions.amount?.toString() || '10000',
+                orderId: orderId,
+                orderInfo: paymentOptions.orderInfo || 'Test payment via MoMo API',
+                redirectUrl: paymentOptions.returnUrl || window.location.origin + '/payment/status',
+                ipnUrl: paymentOptions.ipnUrl || window.location.origin + '/api/payments/momo/ipn',
+                extraData: paymentOptions.extraData || '',
+                requestType: paymentOptions.requestType || 'captureWallet',
+                
+                // Other required parameters for signature generation
+                // The signature should be generated on the backend for security
+                // This is just for testing purposes
+                signatureTest: true, // Signal to backend this needs signature
+                
+                // Optional parameters
+                lang: 'vi',
+                
+                // Include appointment ID if provided
+                ...(paymentOptions.appointmentId && { appointmentId: paymentOptions.appointmentId })
+            };
+            
+            console.log('Direct MoMo API request data:', directRequest);
+            
+            // Send the request to your backend endpoint that handles MoMo API
+            const response = await axios.post(`${API_URL}/direct-test`, directRequest, {
+                headers: getAuthHeaders()
             });
+            
+            console.log('Direct MoMo API response:', response.data);
+            
+            // Return formatted response
+            return {
+                ...response.data,
+                testRequest: directRequest
+            };
+        } catch (error) {
+            console.error('Error testing direct MoMo API:', error);
+            return {
+                error: error.message,
+                errorDetails: error.response?.data,
+                errorStatus: error.response?.status
+            };
         }
     }
 }

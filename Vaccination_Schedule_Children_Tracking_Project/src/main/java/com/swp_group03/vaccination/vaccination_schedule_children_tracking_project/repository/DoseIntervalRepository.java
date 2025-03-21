@@ -12,5 +12,9 @@ public interface DoseIntervalRepository extends JpaRepository<DoseInterval, Long
     
     List<DoseInterval> findByVaccineOrderByFromDoseAsc(Vaccine vaccine);
     
+    DoseInterval findByVaccineAndFromDose(Vaccine vaccine, Integer fromDose);
+    
+    List<DoseInterval> findByVaccineId(Long vaccineId);
+    
     void deleteByVaccineId(Long vaccineId);
 } 

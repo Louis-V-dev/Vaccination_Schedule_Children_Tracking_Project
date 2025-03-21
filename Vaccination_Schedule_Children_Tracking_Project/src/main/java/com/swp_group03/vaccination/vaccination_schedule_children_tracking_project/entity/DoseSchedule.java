@@ -43,11 +43,15 @@ public class DoseSchedule {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "is_paid", nullable = false)
+    private Boolean isPaid = false;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
         if (status == null) status = DoseStatus.UNSCHEDULED;
+        if (isPaid == null) isPaid = false;
     }
 
     @PreUpdate
@@ -61,5 +65,14 @@ public class DoseSchedule {
 
     public String getStatus() {
         return status != null ? status.name() : null;
+    }
+
+    // Custom getter and setter for isPaid field
+    public Boolean isPaid() {
+        return isPaid;
+    }
+    
+    public void setIsPaid(Boolean isPaid) {
+        this.isPaid = isPaid;
     }
 } 
