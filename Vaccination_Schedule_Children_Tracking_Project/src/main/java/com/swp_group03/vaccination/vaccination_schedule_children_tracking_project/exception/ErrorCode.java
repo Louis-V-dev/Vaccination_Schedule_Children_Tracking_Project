@@ -103,7 +103,7 @@ public enum ErrorCode {
     // Payment related errors (10xxx)
     PAYMENT_FAILED(10000, "Payment failed"),
     PAYMENT_ALREADY_PROCESSED(10001, "Payment already processed"),
-    INVALID_PAYMENT_METHOD(10002, "Invalid payment method"), INVALID_APPOINTMENT_VACCINE_REQUEST(10003, "Invalid appointment vaccine request" );
+    INVALID_PAYMENT_METHOD(10002, "Invalid payment method"), INVALID_APPOINTMENT_VACCINE_REQUEST(10003, "Invalid appointment vaccine request" ), DOCTOR_NOT_FOUND(1004,"doctor not found" ), DOCTOR_REQUIRED(1005,"doctor is required" );
 
     private final int code;
     private final String message;

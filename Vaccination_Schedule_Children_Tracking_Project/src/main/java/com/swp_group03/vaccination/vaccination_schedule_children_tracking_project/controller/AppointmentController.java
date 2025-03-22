@@ -47,8 +47,8 @@ public class AppointmentController {
                 .id(appointment.getId())
                 .childId(appointment.getChild().getChild_id())
                 .childName(appointment.getChild().getChild_name())
-                .doctorId(appointment.getDoctor().getAccountId())
-                .doctorName(appointment.getDoctor().getFirstName() + " " + appointment.getDoctor().getLastName())
+                .doctorId(appointment.getDoctor() != null ? appointment.getDoctor().getAccountId() : null)
+                .doctorName(appointment.getDoctor() != null ? appointment.getDoctor().getFirstName() + " " + appointment.getDoctor().getLastName() : "Not assigned")
                 .appointmentTime(appointment.getAppointmentTime())
                 .timeSlot(appointment.getTimeSlot())
                 .status(appointment.getStatus())
@@ -251,8 +251,8 @@ public class AppointmentController {
                 .id(appointment.getId())
                 .childId(appointment.getChild().getChild_id())
                 .childName(appointment.getChild().getChild_name())
-                .doctorId(appointment.getDoctor().getAccountId())
-                .doctorName(appointment.getDoctor().getFirstName() + " " + appointment.getDoctor().getLastName())
+                .doctorId(appointment.getDoctor() != null ? appointment.getDoctor().getAccountId() : null)
+                .doctorName(appointment.getDoctor() != null ? appointment.getDoctor().getFirstName() + " " + appointment.getDoctor().getLastName() : "Not assigned")
                 .appointmentTime(appointment.getAppointmentTime())
                 .timeSlot(appointment.getTimeSlot())
                 .status(appointment.getStatus())
@@ -324,198 +324,49 @@ public class AppointmentController {
         }
     }
     
-    @PutMapping("/{id}/paid")
+    @PutMapping("/{appointmentId}/paid")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> updateAppointmentPaymentStatus(@PathVariable Long id) {
+    public ResponseEntity<?> updateAppointmentPaymentStatus(@PathVariable Long appointmentId) {
         try {
-            System.out.println("Marking appointment " + id + " as paid");
-            Appointment appointment = appointmentService.findById(id)
+            // Find the appointment
+            Appointment appointment = appointmentService.findById(appointmentId)
                 .orElseThrow(() -> new AppException(ErrorCode.APPOINTMENT_NOT_FOUND));
             
-            Payment payment = null;
+            System.out.println("Updating payment status for appointment: " + appointmentId);
+            System.out.println("Current appointment status: " + appointment.getStatus());
+            System.out.println("Current appointment isPaid: " + appointment.isPaid());
             
-            // First check if the appointment already has a payment assigned
-            if (appointment.getPayment() != null) {
-                payment = appointment.getPayment();
-                System.out.println("Appointment already has payment with ID: " + payment.getId() + " and status: " + payment.getStatus());
-                
-                // Update the payment status if needed
-                if (payment.getStatus() != PaymentStatus.COMPLETED) {
-                    payment.setStatus(PaymentStatus.COMPLETED);
-                    payment = paymentRepository.save(payment);
-                    System.out.println("Updated payment status to COMPLETED");
-                }
-            } else {
-                // If no payment is associated, try to find one by transaction ID
-                String orderRef = "Payment for appointment #" + id;
-                System.out.println("Looking for payment with pattern: " + orderRef);
-                payment = paymentRepository.findFirstByTransactionIdContainingOrderByCreatedAtDesc(orderRef);
-                
-                // If not found, try to find by MoMo transaction ID pattern
-                if (payment == null) {
-                    System.out.println("Trying to find a recent MOMO payment...");
-                    
-                    // First try to find any payment with MOMO in the transaction ID
-                    payment = paymentRepository.findFirstByTransactionIdContainingAndStatusOrderByCreatedAtDesc("MOMO", PaymentStatus.PENDING);
-                    if (payment != null) {
-                        System.out.println("Found MOMO payment with transaction ID: " + payment.getTransactionId());
-                    }
-                    
-                    // If still not found, try to find by user ID
-                    if (payment == null) {
-                        List<Payment> momoPayments = paymentRepository.findByStatusAndTransactionIdContainingOrderByCreatedAtDesc(
-                            PaymentStatus.PENDING, "MOMO");
-                        
-                        // Find the most recent MoMo payment for the user
-                        if (!momoPayments.isEmpty()) {
-                            String userId = String.valueOf(appointment.getChild().getAccount_Id());
-                            for (Payment momoPayment : momoPayments) {
-                                if (momoPayment.getUser() != null && 
-                                    userId.equals(momoPayment.getUser()) && 
-                                    (momoPayment.getAppointment() == null || momoPayment.getAppointment().getId() == null)) {
-                                    payment = momoPayment;
-                                    System.out.println("Found matching MoMo payment with ID: " + payment.getId());
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                if (payment != null) {
-                    System.out.println("Found existing payment with ID: " + payment.getId() + " and status: " + payment.getStatus());
-                    // Update payment status to COMPLETED - but keep the original transaction ID
-                    payment.setStatus(PaymentStatus.COMPLETED);
-                    payment.setPaymentDate(LocalDateTime.now());
-                    // Don't update the transaction ID if it already has one
-                    if (payment.getTransactionId() == null || payment.getTransactionId().trim().isEmpty()) {
-                        payment.setTransactionId("Payment for appointment #" + id);
-                    }
-                    // Add a note about the manual processing
-                    payment.setNotes("Payment processed and marked as completed");
-                    payment = paymentRepository.save(payment);
-                    System.out.println("Updated payment status to COMPLETED");
-                } else {
-                    System.out.println("No payment found, creating a new one as last resort");
-                    
-                    // Create a new payment record if none exists
-                    System.out.println("Creating new payment record for appointment: " + id);
-                    Payment newPayment = Payment.builder()
-                        .user(appointment.getChild().getAccount_Id())
-                        .amount(BigDecimal.valueOf(appointment.getTotalAmount()))
-                        .totalAmount(BigDecimal.valueOf(appointment.getTotalAmount()))
-                        .status(PaymentStatus.COMPLETED)
-                        .paymentDate(LocalDateTime.now())
-                        .transactionId("Manual payment for appointment #" + id)
-                        .notes("Manual payment processed by system")
-                        .build();
-                    
-                    // Get default payment method (MOMO)
-                    Optional<PaymentMethod> defaultMethod = paymentMethodRepository.findByCode("MOMO");
-                    if (defaultMethod.isPresent()) {
-                        newPayment.setPaymentMethod(defaultMethod.get());
-                    }
-                    
-                    payment = paymentRepository.save(newPayment);
-                    System.out.println("Created new payment with ID: " + payment.getId());
-                }
-                
-                // Associate payment with appointment
-                appointment.setPayment(payment);
-                payment.setAppointment(appointment);
-                // Save the payment again to update its relationship with the appointment
-                payment = paymentRepository.save(payment);
-                System.out.println("Associated payment ID: " + payment.getId() + " with appointment: " + id);
+            // Handle case where appointment is in OFFLINE_PAYMENT status
+            if (appointment.getStatus() == AppointmentStatus.OFFLINE_PAYMENT) {
+                System.out.println("Processing offline payment for appointment: " + appointmentId);
             }
             
-            // Update appointment status regardless
+            // Set the appointment as paid
             appointment.setPaid(true);
             appointment.setStatus(AppointmentStatus.PAID);
+            
+            // Save the updated appointment
             appointmentService.saveAppointment(appointment);
-            System.out.println("Updated appointment status to PAID");
             
             // Process vaccines after payment
-            appointmentService.processVaccinesAfterPayment(id);
-            System.out.println("Processed vaccines after payment for appointment: " + id);
+            appointmentService.processVaccinesAfterPayment(appointmentId);
             
-            // Convert to DTO to avoid serialization issues
-            AppointmentResponseDTO responseDTO = AppointmentResponseDTO.builder()
-                .id(appointment.getId())
-                .childId(appointment.getChild().getChild_id())
-                .childName(appointment.getChild().getChild_name())
-                .doctorId(appointment.getDoctor().getAccountId())
-                .doctorName(appointment.getDoctor().getFirstName() + " " + appointment.getDoctor().getLastName())
-                .appointmentTime(appointment.getAppointmentTime())
-                .timeSlot(appointment.getTimeSlot())
-                .status(appointment.getStatus())
-                .notes(appointment.getNotes())
-                .isPaid(appointment.isPaid())
-                .totalAmount(appointment.getTotalAmount())
-                .createdAt(appointment.getCreatedAt())
-                .updatedAt(appointment.getUpdatedAt())
-                .build();
-                
-            // Add appointment vaccines
-            if (appointment.getAppointmentVaccines() != null && !appointment.getAppointmentVaccines().isEmpty()) {
-                List<Map<String, Object>> vaccinesList = new ArrayList<>();
-                
-                for (AppointmentVaccine av : appointment.getAppointmentVaccines()) {
-                    Map<String, Object> vaccineData = new HashMap<>();
-                    
-                    if (av.getVaccine() != null) {
-                        vaccineData.put("vaccineId", av.getVaccine().getId());
-                        vaccineData.put("vaccineName", av.getVaccine().getName());
-                        vaccineData.put("price", av.getVaccine().getPrice());
-                    } else if (av.getVaccineCombo() != null) {
-                        vaccineData.put("vaccineId", av.getVaccineCombo().getComboId());
-                        vaccineData.put("vaccineName", av.getVaccineCombo().getComboId());
-                        vaccineData.put("price", av.getVaccineCombo().getPrice());
-                        vaccineData.put("fromCombo", true);
-                    }
-                    
-                    if (av.getVaccineOfChild() != null) {
-                        vaccineData.put("vaccineOfChildId", av.getVaccineOfChild().getId());
-                        vaccineData.put("doseNumber", av.getDoseNumber());
-                    }
-                    
-                    vaccinesList.add(vaccineData);
-                }
-                
-                responseDTO.setAppointmentVaccines(vaccinesList);
-            }
-            
-            // Add payment details if available
-            if (appointment.getPayment() != null) {
-                Payment paymentEntity = appointment.getPayment();
-                responseDTO.setPaymentId(paymentEntity.getId());
-                responseDTO.setPaymentStatus(paymentEntity.getStatus().toString());
-                responseDTO.setTransactionId(paymentEntity.getTransactionId());
-                responseDTO.setPaymentDate(paymentEntity.getPaymentDate());
-                
-                if (paymentEntity.getPaymentMethod() != null) {
-                    responseDTO.setPaymentMethod(paymentEntity.getPaymentMethod().getName());
-                }
-            }
+            // Fetch the updated appointment to return with response
+            Appointment updatedAppointment = appointmentService.findById(appointmentId)
+                .orElseThrow(() -> new AppException(ErrorCode.APPOINTMENT_NOT_FOUND));
             
             return ResponseEntity.ok(Map.of(
                 "success", true,
-                "message", "Appointment marked as paid successfully",
-                "appointment", responseDTO
+                "message", "Appointment payment status updated successfully",
+                "appointment", updatedAppointment
             ));
-        } catch (AppException e) {
-            System.err.println("Application exception when marking appointment as paid: " + e.getMessage());
-            return ResponseEntity.badRequest().body(Map.of(
-                "code", e.getErrorCode().getCode(),
-                "message", e.getMessage(),
-                "result", null
-            ));
+            
         } catch (Exception e) {
-            System.err.println("Unexpected exception when marking appointment as paid: " + e.getMessage());
+            System.err.println("Error updating appointment payment status: " + e.getMessage());
             e.printStackTrace();
-            return ResponseEntity.badRequest().body(Map.of(
-                "code", 9999,
-                "message", "Uncategorized exception: " + e.getMessage(),
-                "result", null
+            return ResponseEntity.status(500).body(Map.of(
+                "success", false,
+                "message", "Failed to update appointment payment status: " + e.getMessage()
             ));
         }
     }

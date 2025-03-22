@@ -14,5 +14,8 @@ public enum AppointmentStatus {
     IN_OBSERVATION,     // Post-vaccination observation
     COMPLETED,          // All steps completed
     CANCELLED,          // Appointment was cancelled
-    NO_SHOW             // Patient didn't show up
+    NO_SHOW,            // Patient didn't show up
+    OFFLINE_PAYMENT,    // Payment completed offline
+    ABSENT,             // Patient is absent
+    FAILED             // Appointment failed
 } 

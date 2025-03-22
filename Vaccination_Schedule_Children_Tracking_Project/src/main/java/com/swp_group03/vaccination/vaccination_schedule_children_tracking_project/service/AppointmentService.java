@@ -82,7 +82,7 @@ public class AppointmentService {
         // 2. Find or validate doctor's schedule
         WorkSchedule workSchedule;
         if (request.getIsDayPriority()) {
-            // Find available doctor if day priority
+            // Find available schedule if day priority
             workSchedule = findAvailableSchedule(request.getAppointmentDate(), request.getTimeSlot());
         } else {
             // Validate specific doctor's availability
@@ -95,15 +95,48 @@ public class AppointmentService {
         // 4. Create appointment with initial status based on payment method
         boolean isOnlinePayment = "ONLINE".equalsIgnoreCase(request.getPaymentMethod());
         
+        // Only set the doctor explicitly if requested by client
+        // In day priority mode with no specified doctor, keep doctor null initially
+        Account doctor = null;
+        
+        // In doctor priority mode or if doctor ID is specified in day priority mode,
+        // use the specified doctor
+        if (request.getDoctorId() != null) {
+            // Find the doctor by ID
+            doctor = userRepo.findById(request.getDoctorId())
+                .orElseThrow(() -> new AppException(ErrorCode.DOCTOR_NOT_FOUND));
+            log.info("Setting doctor to specified doctor: {}", doctor.getAccountId());
+        } else if (!request.getIsDayPriority()) {
+            throw new AppException(ErrorCode.DOCTOR_REQUIRED);
+        } else {
+            // In day priority mode with no doctor specified, leave doctor as null
+            log.info("No doctor specified in day priority mode. Keeping doctor field as null.");
+        }
+        
+        // Set appropriate status and isPaid flag based on payment method
+        AppointmentStatus initialStatus;
+        boolean initialIsPaid;
+        
+        if (isOnlinePayment) {
+            // For online payments, status is PENDING and isPaid is false
+            initialStatus = AppointmentStatus.PENDING;
+            initialIsPaid = false;
+        } else {
+            // For offline payments, status is OFFLINE_PAYMENT and isPaid is false
+            initialStatus = AppointmentStatus.OFFLINE_PAYMENT;
+            initialIsPaid = false;
+            log.info("Setting OFFLINE_PAYMENT status for appointment");
+        }
+        
         Appointment appointment = Appointment.builder()
             .child(child)
             .workSchedule(workSchedule)
-            .doctor(workSchedule.getEmployee())
+            .doctor(doctor) // This will be null if no doctor was specified in day priority mode
             .appointmentTime(request.getAppointmentDate().atTime(parseTimeSlot(request.getTimeSlot())))
             .timeSlot(request.getTimeSlot())
-            .status(isOnlinePayment ? AppointmentStatus.PENDING : AppointmentStatus.PAID) // Set initial status
+            .status(initialStatus)
             .notes(request.getNotes())
-            .isPaid(!isOnlinePayment) // Set paid status based on payment method
+            .isPaid(initialIsPaid)
             .totalAmount(0.0)
             .appointmentVaccines(new ArrayList<>())
             .build();

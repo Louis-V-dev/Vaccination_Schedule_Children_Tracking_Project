@@ -31,7 +31,7 @@ public class Appointment {
     private WorkSchedule workSchedule;
 
     @ManyToOne
-    @JoinColumn(name = "doctor_id", nullable = false)
+    @JoinColumn(name = "doctor_id")
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "appointments", "workSchedules", "roles"})
     private Account doctor;
 
