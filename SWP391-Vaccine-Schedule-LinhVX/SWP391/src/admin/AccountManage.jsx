@@ -176,9 +176,7 @@ function AccountManage() {
       <Container fluid>
         <div className="d-flex justify-content-between align-items-center mb-4">
           <h1>Account Management</h1>
-          <Button variant="primary" onClick={() => handleShowModal()}>
-            Add New Account
-          </Button>
+         
         </div>
 
         {error && <Alert variant="danger">{error}</Alert>}
@@ -240,8 +238,8 @@ function AccountManage() {
                         variant="danger"
                         size="sm"
                         onClick={() => handleDelete(account.id)}
-                      >
-                        <i className="fas fa-trash"></i> Delete
+                      >--
+                        <i className="fas fa-trash"></i> Deactive
                       </Button>
                     </td>
                   </tr>

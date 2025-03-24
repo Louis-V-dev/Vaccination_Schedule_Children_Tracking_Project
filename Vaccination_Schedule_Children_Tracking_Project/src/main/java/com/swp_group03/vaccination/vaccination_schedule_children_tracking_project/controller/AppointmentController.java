@@ -13,6 +13,8 @@ import com.swp_group03.vaccination.vaccination_schedule_children_tracking_projec
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -528,6 +530,150 @@ public class AppointmentController {
             return ResponseEntity.badRequest().body(Map.of(
                 "success", false,
                 "error", "Failed to check payment status: " + e.getMessage()
+            ));
+        }
+    }
+
+    @GetMapping("/user")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> getUserAppointments() {
+        try {
+            // Get the currently authenticated user
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String username = authentication.getName();
+            
+            // Get all children for this user
+            List<Child> userChildren = childRepo.findByParentAccountId(username);
+            
+            if (userChildren.isEmpty()) {
+                return ResponseEntity.ok(new ArrayList<>());
+            }
+            
+            // Get appointments for all children of this user
+            List<AppointmentResponseDTO> userAppointments = new ArrayList<>();
+            for (Child child : userChildren) {
+                List<Appointment> childAppointments = appointmentService.findByChild(child);
+                
+                for (Appointment appointment : childAppointments) {
+                    AppointmentResponseDTO appointmentDTO = AppointmentResponseDTO.builder()
+                        .id(appointment.getId())
+                        .childId(child.getChild_id())
+                        .childName(child.getChild_name())
+                        .appointmentType(getAppointmentType(appointment))
+                        .appointmentTime(appointment.getAppointmentTime())
+                        .status(appointment.getStatus())
+                        .paymentStatus(appointment.isPaid() ? "PAID" : "UNPAID")
+                        .build();
+                        
+                    userAppointments.add(appointmentDTO);
+                }
+            }
+            
+            return ResponseEntity.ok(userAppointments);
+        } catch (Exception e) {
+            System.err.println("Error fetching user appointments: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body(Map.of(
+                "code", 9999,
+                "message", "Uncategorized exception: " + e.getMessage(),
+                "result", null
+            ));
+        }
+    }
+
+    // Helper method to determine appointment type based on vaccines
+    private String getAppointmentType(Appointment appointment) {
+        if (appointment.getAppointmentVaccines() == null || appointment.getAppointmentVaccines().isEmpty()) {
+            return "STANDARD";
+        }
+        
+        // Check if any vaccine is from a combo
+        boolean hasCombo = appointment.getAppointmentVaccines().stream()
+            .anyMatch(av -> av.getVaccineCombo() != null);
+        
+        if (hasCombo) {
+            return "VACCINE_COMBO";
+        }
+        
+        // Check if any vaccine is a next dose
+        boolean hasNextDose = appointment.getAppointmentVaccines().stream()
+            .anyMatch(av -> av.getDoseSchedule() != null);
+        
+        if (hasNextDose) {
+            return "NEXT_DOSE";
+        }
+        
+        return "NEW_VACCINE";
+    }
+    
+    @GetMapping("/child/{childId}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> getAppointmentsByChildId(@PathVariable String childId) {
+        try {
+            System.out.println("Fetching appointments for child ID: " + childId);
+            
+            // Find the child
+            Child child = childRepo.findById(childId)
+                .orElseThrow(() -> new AppException(ErrorCode.CHILD_NOT_FOUND));
+            
+            // Get appointments for this child
+            List<Appointment> childAppointments = appointmentService.findByChild(child);
+            System.out.println("Found " + childAppointments.size() + " appointments for child: " + childId);
+            
+            // Convert to DTOs
+            List<AppointmentResponseDTO> appointmentDTOs = childAppointments.stream()
+                .map(appointment -> {
+                    AppointmentResponseDTO dto = AppointmentResponseDTO.builder()
+                        .id(appointment.getId())
+                        .childId(child.getChild_id())
+                        .childName(child.getChild_name())
+                        .appointmentType(getAppointmentType(appointment))
+                        .appointmentTime(appointment.getAppointmentTime())
+                        .timeSlot(appointment.getTimeSlot())
+                        .status(appointment.getStatus())
+                        .paymentStatus(appointment.isPaid() ? "PAID" : "UNPAID")
+                        .createdAt(appointment.getCreatedAt())
+                        .updatedAt(appointment.getUpdatedAt())
+                        .build();
+                    
+                    // Add doctor information if available
+                    if (appointment.getDoctor() != null) {
+                        dto.setDoctorId(appointment.getDoctor().getAccountId());
+                        dto.setDoctorName(appointment.getDoctor().getFirstName() + " " + appointment.getDoctor().getLastName());
+                    }
+                    
+                    // Add payment details if available
+                    if (appointment.getPayment() != null) {
+                        Payment paymentEntity = appointment.getPayment();
+                        dto.setPaymentId(paymentEntity.getId());
+                        dto.setPaymentStatus(paymentEntity.getStatus().toString());
+                        dto.setTransactionId(paymentEntity.getTransactionId());
+                        dto.setPaymentDate(paymentEntity.getPaymentDate());
+                        
+                        if (paymentEntity.getPaymentMethod() != null) {
+                            dto.setPaymentMethod(paymentEntity.getPaymentMethod().getName());
+                        }
+                    }
+                    
+                    return dto;
+                })
+                .collect(Collectors.toList());
+            
+            return ResponseEntity.ok(appointmentDTOs);
+        } catch (AppException e) {
+            System.err.println("Application exception when fetching child appointments: " + e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                "code", e.getErrorCode().getCode(),
+                "message", e.getMessage(),
+                "result", null
+            ));
+        } catch (Exception e) {
+            System.err.println("Unexpected exception when fetching child appointments: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body(Map.of(
+                "code", 9999,
+                "message", "Uncategorized exception: " + e.getMessage(),
+                "result", null
             ));
         }
     }

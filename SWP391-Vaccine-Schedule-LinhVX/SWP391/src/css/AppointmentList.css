@@ -1,0 +1,58 @@
+.appointment-list-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.appointment-list-container .card {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.appointment-list-container .card-header {
+  padding: 1rem 1.5rem;
+}
+
+.appointment-list-container .card-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.appointment-list-container .table {
+  margin-bottom: 0;
+}
+
+.appointment-list-container table th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  border-bottom: 2px solid #dee2e6;
+}
+
+.appointment-list-container .badge {
+  font-size: 85%;
+  font-weight: 500;
+  padding: 0.4em 0.6em;
+}
+
+.appointment-list-container .btn-info {
+  background-color: #17a2b8;
+  border-color: #17a2b8;
+  color: white;
+}
+
+.appointment-list-container .btn-info:hover {
+  background-color: #138496;
+  border-color: #117a8b;
+}
+
+@media (max-width: 768px) {
+  .appointment-list-container .table {
+    font-size: 0.9rem;
+  }
+  
+  .appointment-list-container .btn-sm {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.775rem;
+  }
+} 

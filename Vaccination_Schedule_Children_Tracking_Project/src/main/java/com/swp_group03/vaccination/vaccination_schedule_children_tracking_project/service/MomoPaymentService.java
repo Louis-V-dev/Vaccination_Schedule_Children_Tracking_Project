@@ -87,19 +87,28 @@ public class MomoPaymentService {
      */
     public MomoPaymentResponseDTO createPayment(MomoPaymentRequestDTO request) {
         try {
-            // Get appointment ID from request
+            // Extract appointment ID from the request
             Long appointmentId = request.getAppointmentId();
+            
+            // Validate appointment ID
             if (appointmentId == null) {
                 throw new IllegalArgumentException("Appointment ID is required");
             }
             
-            // Find appointment
-            Appointment appointment = appointmentRepository.findById(appointmentId)
-                .orElseThrow(() -> new IllegalArgumentException("Appointment not found"));
+            // Find the appointment
+            Optional<Appointment> appointmentOpt = appointmentRepository.findById(appointmentId);
+            if (!appointmentOpt.isPresent()) {
+                throw new IllegalArgumentException("Appointment not found with ID: " + appointmentId);
+            }
+            
+            Appointment appointment = appointmentOpt.get();
+            
+            // Create a consistent transaction ID format that will be easy to match later
+            String consistentTransactionId = "appointment-" + appointmentId;
             
             // Create order info
-            String orderId = partnerCode + System.currentTimeMillis();
-            String requestId = orderId;
+            String orderId = consistentTransactionId;
+            String requestId = partnerCode + System.currentTimeMillis();
             // Use order info from request or create default
             String orderInfo = request.getOrderInfo() != null ? request.getOrderInfo() 
                               : "Payment for appointment #" + appointmentId;
@@ -200,12 +209,8 @@ public class MomoPaymentService {
                 payment = paymentRepository.save(payment);
                 
                 // Update appointment with payment
-                // appointment.setPayment(payment); // Uncomment when the setPayment method is implemented in Appointment class
+                appointment.setPayment(payment);
                 appointmentRepository.save(appointment);
-                
-                // Update appointment
-                appointment.setStatus(AppointmentStatus.PAID);
-                appointment.setPaid(true);
                 
                 // Create response DTO
                 MomoPaymentResponseDTO responseDTO = new MomoPaymentResponseDTO();

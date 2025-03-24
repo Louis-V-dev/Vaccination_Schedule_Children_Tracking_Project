@@ -29,6 +29,9 @@ public class AppointmentResponseDTO {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     
+    // Appointment type (NEW_VACCINE, NEXT_DOSE, VACCINE_COMBO, etc.)
+    private String appointmentType;
+    
     // Payment details
     private Long paymentId;
     private String paymentStatus;

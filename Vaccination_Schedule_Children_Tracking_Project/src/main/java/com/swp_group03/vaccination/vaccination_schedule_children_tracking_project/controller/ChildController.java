@@ -12,7 +12,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -40,42 +42,121 @@ public class ChildController {
     }
 
     @PatchMapping("/{id}")
-    public ResponseEntity<Child> updateChild(@Validated @RequestBody ChildrenRequest child, @PathVariable String id) {
-        return ResponseEntity.ok(childService.updateChildren(child, id));
+    public ResponseEntity<?> updateChild(@Validated @RequestBody ChildrenRequest child, @PathVariable String id, Authentication authentication) {
+        try {
+            // Get the authenticated user
+            String username = authentication.getName();
+            
+            // Get the child to check ownership
+            Child existingChild = childService.getChildById(id);
+            
+            // Check if user is the parent of the child
+            boolean isParent = existingChild.getAccount_Id() != null && 
+                              username.equals(existingChild.getAccount_Id().getAccountId());
+            
+            // If user is not the parent, deny access
+            if (!isParent) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("You don't have permission to update this child's information");
+            }
+            
+            return ResponseEntity.ok(childService.updateChildren(child, id));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
     @GetMapping()
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ResponseEntity<List<Child>> getChildren() {
         return ResponseEntity.ok(childService.getChildren());
     }
     
     @GetMapping("/{id}")
-    public ResponseEntity<Child> getChildById(@PathVariable String id) {
-        return ResponseEntity.ok(childService.getChildById(id));
+    public ResponseEntity<?> getChildById(@PathVariable String id, Authentication authentication) {
+        try {
+            // Get the authenticated user
+            Account user = userService.getUserFromAuthentication(authentication);
+            String username = authentication.getName();
+            
+            // Get the child
+            Child child = childService.getChildById(id);
+            
+            // Check if user is the parent of the child
+            boolean isParent = child.getAccount_Id() != null && 
+                               username.equals(child.getAccount_Id().getAccountId());
+            
+            // If user is not the parent, deny access
+            if (!isParent) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("You don't have permission to view this child's information");
+            }
+            
+            return ResponseEntity.ok(child);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
     
     @GetMapping("/guardian")
     public ResponseEntity<List<Child>> getChildrenByGuardian(Authentication authentication) {
-        Account guardian = userService.getUserFromAuthentication(authentication);
-        return ResponseEntity.ok(childService.getChildrenByGuardian(guardian));
+        try {
+            // Get the authenticated user
+            Account guardian = userService.getUserFromAuthentication(authentication);
+            
+            // Log the request for debugging
+            System.out.println("Fetching children for user: " + guardian.getAccountId());
+            
+            // Get children for this user
+            List<Child> children = childService.getChildrenByGuardian(guardian);
+            
+            System.out.println("Found " + children.size() + " children for user: " + guardian.getAccountId());
+            
+            return ResponseEntity.ok(children);
+        } catch (Exception e) {
+            System.err.println("Error fetching children for guardian: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
     }
     
     @GetMapping("/guardian/paged")
-    public ResponseEntity<Page<Child>> getChildrenByGuardianPaged(
+    public ResponseEntity<?> getChildrenByGuardianPaged(
             Authentication authentication,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "child_name") String sortBy,
             @RequestParam(defaultValue = "asc") String direction) {
         
-        Account guardian = userService.getUserFromAuthentication(authentication);
-        Sort.Direction sortDirection = direction.equalsIgnoreCase("asc") ? Sort.Direction.ASC : Sort.Direction.DESC;
-        Pageable pageable = PageRequest.of(page, size, Sort.by(sortDirection, sortBy));
-        
-        return ResponseEntity.ok(childService.getChildrenByGuardian(guardian, pageable));
+        try {
+            // Get the authenticated user
+            Account guardian = userService.getUserFromAuthentication(authentication);
+            
+            // Log the request for debugging
+            System.out.println("Fetching paged children for user: " + guardian.getAccountId() + 
+                              ", page: " + page + ", size: " + size);
+            
+            Sort.Direction sortDirection = direction.equalsIgnoreCase("asc") ? Sort.Direction.ASC : Sort.Direction.DESC;
+            Pageable pageable = PageRequest.of(page, size, Sort.by(sortDirection, sortBy));
+            
+            // Get children for this user
+            Page<Child> children = childService.getChildrenByGuardian(guardian, pageable);
+            
+            System.out.println("Found " + children.getTotalElements() + " total children for user: " + 
+                              guardian.getAccountId() + " (page " + page + " contains " + 
+                              children.getNumberOfElements() + " items)");
+            
+            return ResponseEntity.ok(children);
+        } catch (Exception e) {
+            System.err.println("Error fetching paged children for guardian: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error fetching children: " + e.getMessage());
+        }
     }
     
     @GetMapping("/search")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ResponseEntity<List<Child>> searchChildren(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String gender,
@@ -85,26 +166,31 @@ public class ChildController {
     }
     
     @GetMapping("/search/name")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ResponseEntity<List<Child>> searchByName(@RequestParam String name) {
         return ResponseEntity.ok(childService.searchChildrenByName(name));
     }
     
     @GetMapping("/search/blood-type")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ResponseEntity<List<Child>> searchByBloodType(@RequestParam String bloodType) {
         return ResponseEntity.ok(childService.getChildrenByBloodType(bloodType));
     }
     
     @GetMapping("/search/allergies")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ResponseEntity<List<Child>> searchByAllergies(@RequestParam String allergies) {
         return ResponseEntity.ok(childService.searchChildrenByAllergies(allergies));
     }
     
     @GetMapping("/search/medical-condition")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ResponseEntity<List<Child>> searchByMedicalCondition(@RequestParam String condition) {
         return ResponseEntity.ok(childService.searchChildrenByMedicalCondition(condition));
     }
     
     @GetMapping("/search/age-range")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     public ResponseEntity<List<Child>> searchByAgeRange(
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") Date fromDate,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") Date toDate) {
@@ -114,14 +200,54 @@ public class ChildController {
     
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deactivateChild(@PathVariable String id) {
-        childService.deactivateChild(id);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<?> deactivateChild(@PathVariable String id, Authentication authentication) {
+        try {
+            // Get the authenticated user
+            String username = authentication.getName();
+            
+            // Get the child to check ownership
+            Child child = childService.getChildById(id);
+            
+            // Check if user is the parent of the child
+            boolean isParent = child.getAccount_Id() != null && 
+                              username.equals(child.getAccount_Id().getAccountId());
+            
+            // If user is not the parent, deny access
+            if (!isParent) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("You don't have permission to delete this child's information");
+            }
+            
+            childService.deactivateChild(id);
+            return ResponseEntity.noContent().build();
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
     
     @PostMapping("/{id}/reactivate")
-    public ResponseEntity<Void> reactivateChild(@PathVariable String id) {
-        childService.reactivateChild(id);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<?> reactivateChild(@PathVariable String id, Authentication authentication) {
+        try {
+            // Get the authenticated user
+            String username = authentication.getName();
+            
+            // Get the child to check ownership
+            Child child = childService.getChildById(id);
+            
+            // Check if user is the parent of the child
+            boolean isParent = child.getAccount_Id() != null && 
+                              username.equals(child.getAccount_Id().getAccountId());
+            
+            // If user is not the parent, deny access
+            if (!isParent) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("You don't have permission to reactivate this child's information");
+            }
+            
+            childService.reactivateChild(id);
+            return ResponseEntity.noContent().build();
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 }

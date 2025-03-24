@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { Button, Col, Container, Form, Row, Card, Image, Modal, InputGroup } from "react-bootstrap";
-import { Link, useNavigate } from "react-router-dom";
+import { Button, Col, Container, Form, Row, Card, Image, Modal, InputGroup, Alert } from "react-bootstrap";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import authService from "../services/authService";
 import { toast } from 'react-toastify';
 import { FaUser, FaLock, FaGoogle, FaEnvelope } from 'react-icons/fa';
@@ -8,6 +8,7 @@ import '../css/LoginPage.css';
 
 function LoginPage() {
 	const navigate = useNavigate();
+	const location = useLocation();
 	const [formData, setFormData] = useState({
 		username: "",
 		password: "",
@@ -20,6 +21,7 @@ function LoginPage() {
 	const [verificationCode, setVerificationCode] = useState("");
 	const [verificationError, setVerificationError] = useState("");
 	const [verifyLoading, setVerifyLoading] = useState(false);
+	const [successMessage, setSuccessMessage] = useState("");
 
 	// Forgot password states
 	const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
@@ -31,12 +33,19 @@ function LoginPage() {
 	const [forgotPasswordError, setForgotPasswordError] = useState("");
 	const [resetLoading, setResetLoading] = useState(false);
 
-	// Check if user is already logged in
+	// Check if user is already logged in and check for success message from registration
 	useEffect(() => {
 		if (authService.isAuthenticated()) {
 			navigate('/');
 		}
-	}, [navigate]);
+		
+		// Check if we have a success message from registration/verification
+		if (location.state?.verificationSuccess) {
+			setSuccessMessage(location.state.message || "Registration successful! Please login with your credentials.");
+			// Clear the state to prevent showing the message again on refresh
+			window.history.replaceState({}, document.title);
+		}
+	}, [navigate, location]);
 
 	const handleInputChange = (e) => {
 		const { id, name, value } = e.target;
@@ -237,6 +246,9 @@ function LoginPage() {
 			toast.success("Password reset successfully! You can now log in with your new password.");
 			setShowForgotPasswordModal(false);
 			
+			// Set success message to display on login form
+			setSuccessMessage("Password reset successfully! You can now log in with your new password.");
+			
 			// Clear the password fields in the login form
 			setFormData(prev => ({
 				...prev,
@@ -267,6 +279,12 @@ function LoginPage() {
 									Sign in to manage your vaccination schedule
 								</p>
 							</div>
+
+							{successMessage && (
+								<Alert variant="success" className="mb-4">
+									{successMessage}
+								</Alert>
+							)}
 
 							<Form onSubmit={handleSubmit} noValidate>
 								<Form.Group className="form-group" controlId="txtUsername">

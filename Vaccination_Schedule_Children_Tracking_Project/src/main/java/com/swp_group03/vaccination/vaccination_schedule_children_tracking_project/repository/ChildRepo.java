@@ -126,4 +126,12 @@ public interface ChildRepo extends JpaRepository<Child, String> {
     List<Child> searchActiveChildren(@Param("name") String name, 
                                    @Param("gender") String gender, 
                                    @Param("bloodType") String bloodType);
+
+    /**
+     * Find all children belonging to a specific parent account
+     * @param accountId The account ID of the parent
+     * @return List of children for the parent
+     */
+    @Query("SELECT c FROM Child c WHERE c.account_Id.accountId = :accountId AND c.active = true")
+    List<Child> findByParentAccountId(@Param("accountId") String accountId);
 }

@@ -103,4 +103,19 @@ public class Appointment {
     public boolean isPaid() {
         return this.isPaid;
     }
+    
+    /**
+     * Gets all payments associated with this appointment.
+     * For now, this just returns a list with the current payment if it exists.
+     * In the future, this could be expanded to handle multiple payments per appointment.
+     * 
+     * @return List of payments associated with this appointment
+     */
+    public List<Payment> getPayments() {
+        List<Payment> payments = new ArrayList<>();
+        if (this.payment != null) {
+            payments.add(this.payment);
+        }
+        return payments;
+    }
 } 

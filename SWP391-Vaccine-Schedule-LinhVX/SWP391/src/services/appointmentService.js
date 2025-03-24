@@ -490,13 +490,77 @@ class AppointmentService {
   // Get user's appointments
   async getUserAppointments() {
     try {
-      const response = await axios.get(`${API_URL}/appointments/user`, {
+      console.log('Fetching user appointments via children');
+      
+      // First, get the user's children using the proper "/guardian" endpoint
+      const childrenResponse = await axios.get(`${API_URL}/children/guardian`, {
         headers: getAuthHeaders()
       });
-      return response.data;
+      
+      const children = childrenResponse.data || [];
+      console.log(`Found ${children.length} children for current user`);
+      
+      if (!children.length) {
+        console.log('No children found, returning empty appointments list');
+        return [];
+      }
+      
+      // Fetch appointments for each child
+      const appointmentPromises = children.map(child => 
+        axios.get(`${API_URL}/appointments/child/${child.child_id}`, {
+          headers: getAuthHeaders()
+        })
+        .then(response => {
+          console.log(`Retrieved ${response.data?.length || 0} appointments for child ${child.child_id}`);
+          return response.data || [];
+        })
+        .catch(error => {
+          console.error(`Error fetching appointments for child ${child.child_id}:`, error);
+          return []; // Return empty array if fetch fails for a child
+        })
+      );
+      
+      // Wait for all appointment requests to complete
+      const childAppointmentsArrays = await Promise.all(appointmentPromises);
+      
+      // Flatten the arrays of appointments and add child info
+      const allAppointments = [];
+      childAppointmentsArrays.forEach((appointments, index) => {
+        if (appointments && appointments.length > 0) {
+          const child = children[index];
+          appointments.forEach(appointment => {
+            // Add child info to appointment if not already present
+            if (!appointment.childName && child.child_name) {
+              appointment.childName = child.child_name;
+            }
+            if (!appointment.childId && child.child_id) {
+              appointment.childId = child.child_id;
+            }
+            allAppointments.push(appointment);
+          });
+        }
+      });
+      
+      console.log(`Retrieved ${allAppointments.length} total appointments for all children`);
+      return allAppointments;
     } catch (error) {
       console.error('Error fetching user appointments:', error);
-      throw error;
+      
+      // Try fallback to direct user appointments endpoint if it exists
+      try {
+        console.log('Attempting fallback to direct user appointments endpoint');
+        const response = await axios.get(`${API_URL}/appointments/user`, {
+          headers: getAuthHeaders()
+        });
+        console.log(`Retrieved ${response.data?.length || 0} appointments from fallback endpoint`);
+        return response.data || [];
+      } catch (fallbackError) {
+        console.error('Fallback also failed:', fallbackError);
+        
+        // Return empty array instead of throwing error
+        console.log('Returning empty array after all attempts failed');
+        return [];
+      }
     }
   }
 
@@ -814,11 +878,14 @@ class AppointmentService {
         // continue with marking as paid even if check fails
       }
       
+      // Use a consistent transaction ID format that will match what was used in initial payment creation
+      const consistentTransId = `appointment-${appointmentId}`;
+      
       // First make a direct call to payments/record endpoint to ensure the payment status is updated
       const directPaymentData = {
         orderInfo: `Payment for appointment #${appointmentId}`,
         resultCode: 0, // Success code
-        transId: `direct-${appointmentId}-${Date.now()}`,
+        transId: consistentTransId,
         amount: appointment?.totalAmount || 0,
         paymentMethod: 'MOMO',
         status: 'COMPLETED',
@@ -853,7 +920,7 @@ class AppointmentService {
       const paymentData = {
         paymentMethod: 'MOMO',
         paymentStatus: 'COMPLETED',
-        paymentReference: `MOMO-${appointmentId}-${Date.now()}`,
+        paymentReference: consistentTransId,
         paymentDate: new Date().toISOString(),
         status: 'PAID'
       };
@@ -898,12 +965,13 @@ class AppointmentService {
             const emergencyPayload = {
               orderInfo: `Payment for appointment #${appointmentId}`,
               resultCode: 0,
-              transId: `emergency-${appointmentId}-${Date.now()}`,
+              transId: consistentTransId, // Use consistent transaction ID
               amount: appointment?.totalAmount || 0,
               paymentMethod: 'MOMO',
               paymentStatus: 'COMPLETED',
               paymentDate: new Date().toISOString(),
-              emergency: true // Flag to indicate this is an emergency update
+              emergency: true, // Flag to indicate this is an emergency update
+              appointmentId: appointmentId // Include the appointment ID explicitly
             };
             
             const emergencyResponse = await axios.post(`${API_URL}/payments/record`, emergencyPayload, {
@@ -938,6 +1006,9 @@ class AppointmentService {
     try {
       console.log('Attempting force update of payment status for appointment:', appointmentId);
       
+      // Use a consistent transaction ID
+      const consistentTransId = `appointment-${appointmentId}`;
+      
       // Try multiple endpoints to ensure success
       const requests = [
         // 1. Try the record payment endpoint
@@ -946,8 +1017,9 @@ class AppointmentService {
           amount: paymentDetails.amount || 0,
           method: paymentDetails.method || 'MOMO',
           status: 'COMPLETED',
-          reference: paymentDetails.reference || `force-${appointmentId}-${Date.now()}`,
+          reference: paymentDetails.reference || consistentTransId,
           orderInfo: `Force payment update for appointment #${appointmentId}`,
+          transId: consistentTransId,
           forceUpdate: true
         }, { headers: getAuthHeaders() }),
         
@@ -962,6 +1034,7 @@ class AppointmentService {
         axios.post(`${API_URL}/appointments/${appointmentId}/mark-paid`, {
           paymentMethod: paymentDetails.method || 'MOMO',
           paymentStatus: 'COMPLETED',
+          paymentReference: consistentTransId,
           paymentDate: new Date().toISOString(),
           status: 'PAID'
         }, { headers: getAuthHeaders() })
@@ -1008,6 +1081,9 @@ class AppointmentService {
     try {
       console.log('Attempting direct database update for payment on appointment:', appointmentId);
       
+      // Use a consistent transaction ID
+      const consistentTransId = `appointment-${appointmentId}`;
+      
       // Construct a complete payment record with all necessary fields
       const paymentData = {
         appointmentId: appointmentId,
@@ -1015,7 +1091,7 @@ class AppointmentService {
         method: paymentDetails.method || 'MOMO',
         status: 'COMPLETED',
         resultCode: 0, // Force success code
-        transId: paymentDetails.reference || `direct-${appointmentId}-${Date.now()}`,
+        transId: paymentDetails.reference || consistentTransId,
         orderInfo: `Payment for appointment #${appointmentId}`,
         paymentDate: new Date().toISOString(),
         forceDbUpdate: true // Special flag for backend
@@ -1034,13 +1110,13 @@ class AppointmentService {
       if (response.data && response.data.success) {
         return {
           success: true,
-          message: 'Payment updated successfully via direct database update',
+          message: 'Direct payment database update succeeded',
           data: response.data
         };
       } else {
         return {
           success: false,
-          message: response.data?.message || 'Direct payment update failed',
+          message: 'Direct payment update failed: ' + (response.data?.message || 'Unknown error'),
           data: response.data
         };
       }
@@ -1048,7 +1124,7 @@ class AppointmentService {
       console.error('Error in direct payment update:', error);
       return {
         success: false,
-        message: error.message || 'Direct payment update failed with exception',
+        message: error.message || 'Failed to perform direct payment update',
         _error: error
       };
     }

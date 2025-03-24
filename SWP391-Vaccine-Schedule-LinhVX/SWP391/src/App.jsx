@@ -19,6 +19,7 @@ import HealthRecordDetail from './pages/HealthRecordDetail';
 import PaymentResult from './pages/PaymentResult';
 import PaymentExample from './pages/PaymentExample';
 import AppointmentCreation from './user/AppointmentCreation';
+import AppointmentList from './user/AppointmentList';
 import PaymentStatus from './user/PaymentStatus';
 import MomoDebug from './components/payment/MomoDebug';
 
@@ -42,6 +43,7 @@ function App() {
 			<Route path={"/children"} element={<ChildrenManagement />} />
 			<Route path={"/booking"} element={<AppointmentCreation />} />
 			<Route path={"/appointment-creation"} element={<AppointmentCreation />} />
+			<Route path={"/appointments"} element={<AppointmentList />} />
 			<Route path={"/vaccination-history"} element={<VaccinationHistoryPage />} />
 			<Route path={"/service-package"} element={<ServicePackagePage />} />
 			<Route path={"/health-records"} element={<HealthRecord />} />

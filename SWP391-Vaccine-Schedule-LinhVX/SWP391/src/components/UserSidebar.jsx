@@ -6,7 +6,8 @@ import {
     faChild, 
     faCalendarAlt, 
     faSyringe, 
-    faBox, 
+    faBox,
+    faListAlt,
     faSignOutAlt 
 } from '@fortawesome/free-solid-svg-icons';
 import '../css/UserSidebar.css';
@@ -58,10 +59,10 @@ const UserSidebar = ({ username }) => {
                             CHILDREN MANAGEMENT
                         </Link>
                     </li>
-                    <li className={isActive('/booking')}>
-                        <Link to="/booking">
-                            <FontAwesomeIcon icon={faCalendarAlt} className="nav-icon" />
-                            BOOKING SCHEDULE
+                    <li className={isActive('/appointments')}>
+                        <Link to="/appointments">
+                            <FontAwesomeIcon icon={faListAlt} className="nav-icon" />
+                            MY APPOINTMENTS
                         </Link>
                     </li>
                     <li className={isActive('/vaccination-history')}>

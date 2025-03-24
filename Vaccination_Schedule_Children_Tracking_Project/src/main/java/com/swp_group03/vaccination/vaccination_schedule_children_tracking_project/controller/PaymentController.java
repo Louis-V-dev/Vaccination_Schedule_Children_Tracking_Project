@@ -27,6 +27,7 @@ import java.time.LocalDateTime;
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.Optional;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/payments")
@@ -292,9 +293,23 @@ public class PaymentController {
         try {
             System.out.println("Recording payment: " + paymentData);
             
-            // Extract appointment ID from orderInfo
-            String orderInfo = (String) paymentData.getOrDefault("orderInfo", "");
-            Long appointmentId = extractAppointmentId(orderInfo);
+            // Extract appointment ID from paymentData or orderInfo
+            Long appointmentId = null;
+            if (paymentData.containsKey("appointmentId")) {
+                try {
+                    appointmentId = Long.parseLong(paymentData.get("appointmentId").toString());
+                    System.out.println("Using directly provided appointmentId: " + appointmentId);
+                } catch (NumberFormatException e) {
+                    System.err.println("Invalid appointmentId format in direct data: " + paymentData.get("appointmentId"));
+                }
+            }
+            
+            // If appointmentId wasn't provided directly, try to extract from orderInfo
+            if (appointmentId == null) {
+                String orderInfo = (String) paymentData.getOrDefault("orderInfo", "");
+                appointmentId = extractAppointmentId(orderInfo);
+                System.out.println("Extracted appointmentId from orderInfo: " + appointmentId);
+            }
             
             if (appointmentId == null) {
                 return ResponseEntity.badRequest().body(Map.of(
@@ -315,35 +330,70 @@ public class PaymentController {
             }
             
             Payment payment = null;
+            boolean isExistingPayment = false;
             
             // First, check if the appointment already has a payment
             if (appointment.getPayment() != null) {
                 payment = appointment.getPayment();
+                isExistingPayment = true;
                 System.out.println("Appointment already has payment with ID: " + payment.getId() + ", current status: " + payment.getStatus());
-            } else {
-                // Find the latest payment for this appointment by orderId
-                System.out.println("Looking for payment for appointment ID: " + appointmentId);
-                String orderRef = "Payment for appointment #" + appointmentId;
-                payment = paymentRepository.findFirstByTransactionIdContainingOrderByCreatedAtDesc(orderRef);
+            }
+            
+            // If no payment is associated with the appointment, try to find by transaction ID
+            if (payment == null) {
+                // Check if a transaction ID was provided directly
+                String providedTransactionId = (String) paymentData.getOrDefault("transId", "");
+                if (providedTransactionId != null && !providedTransactionId.isEmpty()) {
+                    System.out.println("Looking for payment with transaction ID: " + providedTransactionId);
+                    Optional<Payment> paymentOpt = paymentRepository.findByTransactionId(providedTransactionId);
+                    
+                    if (paymentOpt.isPresent()) {
+                        payment = paymentOpt.get();
+                        isExistingPayment = true;
+                        System.out.println("Found payment by transaction ID: " + payment.getId());
+                    }
+                }
+                
+                // If still no payment found, try with standard order reference
+                if (payment == null) {
+                    System.out.println("Looking for any payment for appointment ID: " + appointmentId);
+                    // Try to find the most recent payment for this appointment
+                    List<Payment> payments = appointment.getPayments();
+                    if (payments != null && !payments.isEmpty()) {
+                        // Get the most recent payment (assuming list is sorted by creation date)
+                        payment = payments.get(payments.size() - 1);
+                        isExistingPayment = true;
+                        System.out.println("Found most recent payment for appointment: " + payment.getId());
+                    } else {
+                        String orderRef = "Payment for appointment #" + appointmentId;
+                        payment = paymentRepository.findFirstByTransactionIdContainingOrderByCreatedAtDesc(orderRef);
+                        
+                        if (payment != null) {
+                            isExistingPayment = true;
+                            System.out.println("Found payment by order reference: " + payment.getId());
+                        }
+                    }
+                }
             }
             
             // Check the result code to determine status
             Integer resultCode = (Integer) paymentData.getOrDefault("resultCode", -1);
             boolean isSuccess = (resultCode != null && resultCode == 0);
             
-            if (payment != null) {
-                System.out.println("Found existing payment: " + payment.getId() + ", current status: " + payment.getStatus());
+            if (isExistingPayment && payment != null) {
+                System.out.println("Updating existing payment: " + payment.getId() + ", current status: " + payment.getStatus());
                 
                 if (isSuccess) {
                     // Success case
                     payment.setStatus(PaymentStatus.COMPLETED);
                     payment.setPaymentDate(LocalDateTime.now());
                     
-                    // Update transaction details
+                    // Update transaction details if provided
                     String transactionId = (String) paymentData.getOrDefault("transId", "");
                     if (transactionId != null && !transactionId.isEmpty()) {
+                        // Always update the transaction ID to the latest one
                         payment.setGatewayTransactionId(transactionId);
-                        payment.setTransactionId(transactionId);
+                        System.out.println("Updated gateway transaction ID to: " + transactionId);
                     }
                     
                     payment = paymentRepository.save(payment);
@@ -367,9 +417,8 @@ public class PaymentController {
                     paymentRepository.save(payment);
                     System.out.println("Payment marked as FAILED: " + payment.getId());
                 }
-            } else if (isSuccess) {
-                // Create a new payment record if none exists and result is success
-                System.out.println("No existing payment found for appointment ID: " + appointmentId);
+            } else {
+                // Create a new payment record if none exists
                 System.out.println("Creating new payment record for appointment: " + appointmentId);
                 
                 // Extract amount from payment data or use appointment total
@@ -380,20 +429,22 @@ public class PaymentController {
                     amount = appointment.getTotalAmount();
                 }
                 
-                // Get transaction ID from MoMo
+                // Get transaction ID from request or generate one
                 String transactionId = (String) paymentData.getOrDefault("transId", "");
                 if (transactionId == null || transactionId.isEmpty()) {
-                    transactionId = "MoMo payment for appointment #" + appointmentId;
+                    transactionId = "Payment for appointment #" + appointmentId;
                 }
+                
+                PaymentStatus status = isSuccess ? PaymentStatus.COMPLETED : PaymentStatus.PENDING;
                 
                 Payment newPayment = Payment.builder()
                     .user(appointment.getChild().getAccount_Id())
                     .amount(BigDecimal.valueOf(amount))
                     .totalAmount(BigDecimal.valueOf(amount))
-                    .status(PaymentStatus.COMPLETED)
-                    .paymentDate(LocalDateTime.now())
+                    .status(status)
+                    .paymentDate(isSuccess ? LocalDateTime.now() : null)
                     .transactionId(transactionId)
-                    .gatewayTransactionId(transactionId)
+                    .gatewayTransactionId(isSuccess ? transactionId : null)
                     .build();
                 
                 // Get default payment method (MOMO)
@@ -405,28 +456,30 @@ public class PaymentController {
                 payment = paymentRepository.save(newPayment);
                 System.out.println("Created new payment with ID: " + payment.getId());
                 
-                // Always associate payment with appointment
-                appointment.setPayment(payment);
-                payment.setAppointment(appointment);
-                // Save both to ensure bidirectional relationship
-                payment = paymentRepository.save(payment);
-                appointment.setPaid(true);
-                appointment.setStatus(AppointmentStatus.PAID);
-                appointmentRepository.save(appointment);
-                System.out.println("Appointment marked as paid: " + appointmentId);
-                
-                // Process vaccines after payment - use appointmentService instead
-                appointmentService.processVaccinesAfterPayment(appointmentId);
-                System.out.println("Processed vaccines after payment for appointment: " + appointmentId);
+                if (isSuccess) {
+                    // Associate payment with appointment for successful payments
+                    appointment.setPayment(payment);
+                    appointment.setPaid(true);
+                    appointment.setStatus(AppointmentStatus.PAID);
+                    appointmentRepository.save(appointment);
+                    System.out.println("Appointment marked as paid: " + appointmentId);
+                    
+                    // Process vaccines after payment
+                    appointmentService.processVaccinesAfterPayment(appointmentId);
+                    System.out.println("Processed vaccines after payment for appointment: " + appointmentId);
+                }
             }
             
+            // Return success response
             return ResponseEntity.ok(Map.of(
                 "success", true,
-                "message", "Payment recorded successfully",
+                "message", isSuccess ? "Payment completed successfully" : "Payment recorded successfully",
+                "paymentId", payment.getId(),
+                "status", payment.getStatus().toString(),
                 "appointmentId", appointmentId
             ));
-            
         } catch (Exception e) {
+            System.err.println("Error recording payment: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.badRequest().body(Map.of(
                 "success", false,

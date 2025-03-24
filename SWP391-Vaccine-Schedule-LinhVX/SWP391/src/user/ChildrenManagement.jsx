@@ -45,16 +45,11 @@ const ChildrenManagement = () => {
                 return;
             }
 
-            // Determine if user is guardian or staff/admin
-            const userRole = localStorage.getItem('userRole');
-            const isGuardian = userRole === 'GUARDIAN';
+            // Always use getChildrenForGuardian to ensure we only get children belonging to the logged-in user
+            // regardless of the user's role (even for admins/staff)
+            const response = await ChildService.getChildrenForGuardian();
             
-            let response;
-            if (isGuardian) {
-                response = await ChildService.getChildrenForGuardian();
-            } else {
-                response = await ChildService.getAllChildren();
-            }
+            console.log('Children data received:', response.data);
             
             // Ensure we have an array of children
             const childrenData = response.data || [];

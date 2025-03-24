@@ -956,4 +956,14 @@ public class AppointmentService {
         // Calculate the scheduled date based on the interval
         return LocalDateTime.now().plusDays(interval.getIntervalDays());
     }
+
+    /**
+     * Find all appointments for a specific child
+     * @param child The child entity to find appointments for
+     * @return List of appointments for the child
+     */
+    public List<Appointment> findByChild(Child child) {
+        log.info("Finding appointments for child: {}", child.getChild_id());
+        return appointmentRepository.findByChild(child);
+    }
 } 

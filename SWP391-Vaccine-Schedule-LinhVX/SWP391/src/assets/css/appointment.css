@@ -1,24 +1,47 @@
 /* Appointment Creation Styles */
 .appointment-creation-page {
-    background-color: #f8f9fa;
+    background-color: #f9fff9;
     min-height: 100vh;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.animated-card {
+    animation: slideUp 0.5s ease-in-out;
 }
 
 /* Calendar Styles */
 .calendar-container {
     margin-top: 1rem;
-    border: 1px solid #dee2e6;
+    border: 1px solid #28a745;
     border-radius: 0.25rem;
     overflow: hidden;
     background-color: white;
+    box-shadow: 0 4px 12px rgba(0, 128, 0, 0.1);
+    transition: all 0.3s ease;
+    animation: slideUp 0.6s ease-in-out;
+}
+
+.calendar-container:hover {
+    box-shadow: 0 8px 16px rgba(0, 128, 0, 0.15);
 }
 
 .calendar-header {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    background-color: #f8f9fa;
+    background-color: #28a745;
+    color: white;
     font-weight: bold;
-    border-bottom: 1px solid #dee2e6;
+    border-bottom: 1px solid #218838;
 }
 
 .calendar-header div {
@@ -34,10 +57,11 @@
 
 .calendar-day {
     aspect-ratio: 1 / 1;
-    border-right: 1px solid #eee;
-    border-bottom: 1px solid #eee;
+    border-right: 1px solid #e2e8e2;
+    border-bottom: 1px solid #e2e8e2;
     padding: 0.5rem;
     position: relative;
+    transition: all 0.3s ease;
 }
 
 .calendar-day:nth-child(7n) {
@@ -56,24 +80,27 @@
 
 .calendar-day.available {
     cursor: pointer;
-    background-color: #e8f4ff;
-    transition: all 0.2s ease;
+    background-color: #e8f8e8;
+    transition: all 0.3s ease;
 }
 
 .calendar-day.available:hover {
-    background-color: #cce5ff;
+    background-color: #d0f0d0;
     transform: scale(1.05);
     z-index: 1;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.2);
 }
 
 .calendar-day.selected {
-    background-color: #007bff;
+    background-color: #28a745;
     color: white;
+    transform: scale(1.05);
+    z-index: 2;
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
 }
 
 .calendar-day.selected .doctor-count {
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(255, 255, 255, 0.9);
 }
 
 .calendar-day.unavailable {
@@ -109,39 +136,48 @@
 
 .doctor-count {
     font-size: 0.75rem;
-    color: #6c757d;
+    color: #218838;
+    transition: color 0.3s ease;
 }
 
 /* Time slot cards */
 .time-slot-card {
     transition: all 0.3s ease;
     height: 100%;
+    border: 1px solid #e2e8e2;
+    animation: slideUp 0.7s ease-in-out;
 }
 
 .time-slot-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-5px);
+    box-shadow: 0 6px 12px rgba(40, 167, 69, 0.15);
+    border-color: #28a745;
 }
 
 .time-slot-card.selected {
-    border-color: #007bff;
+    border-color: #28a745;
     border-width: 2px;
+    box-shadow: 0 6px 12px rgba(40, 167, 69, 0.2);
 }
 
 /* Doctor cards */
 .doctor-card {
     transition: all 0.3s ease;
     height: 100%;
+    border: 1px solid #e2e8e2;
+    animation: slideUp 0.8s ease-in-out;
 }
 
 .doctor-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-5px);
+    box-shadow: 0 6px 12px rgba(40, 167, 69, 0.15);
+    border-color: #28a745;
 }
 
 .doctor-card.selected {
-    border-color: #007bff;
+    border-color: #28a745;
     border-width: 2px;
+    box-shadow: 0 6px 12px rgba(40, 167, 69, 0.2);
 }
 
 /* Time Slots Grid */
@@ -160,12 +196,143 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
+    background-color: #f2f8f2;
+    border-color: #28a745;
+    color: #218838;
 }
 
 .time-slot-button:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 8px rgba(40, 167, 69, 0.2);
+    background-color: #d0f0d0;
+}
+
+.time-slot-button.selected {
+    background-color: #28a745;
+    color: white;
+    font-weight: bold;
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(40, 167, 69, 0.25);
+}
+
+/* Progress bar */
+.appointment-progress {
+    margin-bottom: 1.5rem;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+.appointment-progress .progress {
+    height: 10px;
+    border-radius: 5px;
+    background-color: #e9ecef;
+    overflow: hidden;
+}
+
+.appointment-progress .progress-bar {
+    background-color: #28a745;
+    transition: width 0.6s ease;
+}
+
+/* Card and button styling */
+.card {
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+    border: 1px solid #28a745;
+    margin-bottom: 16px;
+    transition: all 0.3s ease;
+    animation: slideUp 0.5s ease-in-out;
+}
+
+.card:hover {
+    box-shadow: 0 8px 16px rgba(40, 167, 69, 0.1);
+}
+
+.card-header {
+    background-color: #28a745;
+    border-bottom: 1px solid #218838;
+    font-weight: bold;
+    color: white;
+    padding: 12px 16px;
+}
+
+.btn-primary {
+    background-color: #28a745;
+    border-color: #28a745;
+    transition: all 0.3s ease;
+}
+
+.btn-primary:hover, .btn-primary:focus {
+    background-color: #218838;
+    border-color: #1e7e34;
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 8px rgba(40, 167, 69, 0.2);
+}
+
+.btn-outline-primary {
+    color: #28a745;
+    border-color: #28a745;
+    transition: all 0.3s ease;
+}
+
+.btn-outline-primary:hover, .btn-outline-primary:focus {
+    background-color: #28a745;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(40, 167, 69, 0.2);
+}
+
+.appointment-summary {
+    padding: 16px;
+    background-color: #f9fff9;
+    border-radius: 8px;
+    border-left: 4px solid #28a745;
+    animation: slideUp 0.6s ease-in-out;
+}
+
+.detail-item {
+    padding: 8px 0;
+    border-bottom: 1px solid #e2e8e2;
+    transition: background-color 0.3s ease;
+}
+
+.detail-item:hover {
+    background-color: #f2f8f2;
+}
+
+.detail-item:last-child {
+    border-bottom: none;
+}
+
+.success-icon {
+    color: #28a745;
+    margin-bottom: 16px;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* Alert styling */
+.alert-success {
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+    color: #155724;
+}
+
+.alert-info {
+    background-color: #d1ecf1;
+    border-color: #bee5eb;
+    color: #0c5460;
 }
 
 /* Responsive adjustments */
