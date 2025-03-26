@@ -46,6 +46,51 @@
   border-color: #117a8b;
 }
 
+/* Appointment Details Modal Styling */
+.modal-dialog.modal-lg {
+  max-width: 800px;
+}
+
+.modal-header.bg-primary {
+  color: white;
+}
+
+.appointment-details h5 {
+  color: #3273dc;
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.appointment-details .detail-item {
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.appointment-details .detail-item:hover {
+  background-color: #f8f9fa;
+}
+
+.appointment-details .detail-item strong {
+  color: #495057;
+  margin-right: 0.25rem;
+}
+
+.appointment-details .row {
+  margin-bottom: 1.5rem;
+}
+
+.appointment-details .table {
+  margin-top: 1rem;
+}
+
+.appointment-details .table th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+}
+
 @media (max-width: 768px) {
   .appointment-list-container .table {
     font-size: 0.9rem;
@@ -54,5 +99,14 @@
   .appointment-list-container .btn-sm {
     padding: 0.2rem 0.4rem;
     font-size: 0.775rem;
+  }
+  
+  .modal-dialog.modal-lg {
+    max-width: 95%;
+    margin: 0.5rem auto;
+  }
+  
+  .appointment-details .row > div {
+    margin-bottom: 1.5rem;
   }
 } 

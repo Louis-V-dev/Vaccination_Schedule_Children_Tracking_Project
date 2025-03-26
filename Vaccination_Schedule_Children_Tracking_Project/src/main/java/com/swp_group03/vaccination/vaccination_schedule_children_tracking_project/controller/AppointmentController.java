@@ -41,8 +41,24 @@ public class AppointmentController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> createAppointment(@RequestBody CreateAppointmentRequest request) {
         try {
+            // Log the received request for debugging
+            System.out.println("Received appointment request with isPaid: " + request.getIsPaid());
+            System.out.println("Payment method: " + request.getPaymentMethod());
+            System.out.println("Full request: " + request);
+            
+            // Explicitly ensure the isPaid flag is a proper Boolean
+            if (request.getIsPaid() == null) {
+                System.out.println("isPaid is null, defaulting to false");
+                request.setIsPaid(false);
+            } else {
+                System.out.println("isPaid is " + request.getIsPaid() + " (type: " + request.getIsPaid().getClass().getName() + ")");
+            }
+            
             // Create the appointment using the service
             Appointment appointment = appointmentService.createAppointment(request);
+            
+            // Log the created appointment status for debugging
+            System.out.println("Created appointment with status: " + appointment.getStatus() + ", isPaid: " + appointment.isPaid());
             
             // Convert the appointment entity to DTO to avoid serialization issues
             AppointmentResponseDTO responseDTO = AppointmentResponseDTO.builder()

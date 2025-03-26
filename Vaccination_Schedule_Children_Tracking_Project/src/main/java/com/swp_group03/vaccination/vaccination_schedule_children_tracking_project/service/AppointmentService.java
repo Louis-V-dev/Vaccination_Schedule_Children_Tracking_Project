@@ -113,19 +113,29 @@ public class AppointmentService {
             log.info("No doctor specified in day priority mode. Keeping doctor field as null.");
         }
         
-        // Set appropriate status and isPaid flag based on payment method
+        // Set appropriate status and isPaid flag based on payment method and isPaid flag
         AppointmentStatus initialStatus;
         boolean initialIsPaid;
         
-        if (isOnlinePayment) {
-            // For online payments, status is PENDING and isPaid is false
+        // Debug log the request parameters
+        log.info("Creating appointment with payment method: {}, isPaid: {}", request.getPaymentMethod(), request.getIsPaid());
+        
+        // Check if all vaccines are pre-paid - this check has higher priority
+        if (Boolean.TRUE.equals(request.getIsPaid())) {
+            // For pre-paid appointments, status is PAID and isPaid is true regardless of payment method
+            initialStatus = AppointmentStatus.PAID;
+            initialIsPaid = true;
+            log.info("Setting PAID status for pre-paid appointment (isPaid=true). Payment method: {}", request.getPaymentMethod());
+        } else if (isOnlinePayment) {
+            // Only set to PENDING if not pre-paid AND is online payment
             initialStatus = AppointmentStatus.PENDING;
             initialIsPaid = false;
+            log.info("Setting PENDING status for online payment (isPaid=false)");
         } else {
             // For offline payments, status is OFFLINE_PAYMENT and isPaid is false
             initialStatus = AppointmentStatus.OFFLINE_PAYMENT;
             initialIsPaid = false;
-            log.info("Setting OFFLINE_PAYMENT status for appointment");
+            log.info("Setting OFFLINE_PAYMENT status for offline payment (isPaid=false)");
         }
         
         Appointment appointment = Appointment.builder()
@@ -203,13 +213,20 @@ public class AppointmentService {
             return;
         }
         
-        log.info("Processing {} vaccine requests for {} payment", vaccineRequests.size(), 
-            isOnlinePayment ? "online" : "offline");
+        boolean isPrepaid = appointment.getStatus() == AppointmentStatus.PAID;
         
-        // For online payment, store vaccine requests for later processing
-        if (isOnlinePayment) {
+        log.info("Processing {} vaccine requests for {} payment. Pre-paid: {}", 
+            vaccineRequests.size(), 
+            isOnlinePayment ? "online" : "offline",
+            isPrepaid);
+        
+        // For online payment that is not pre-paid, store vaccine requests for later processing
+        if (isOnlinePayment && !isPrepaid) {
             storeVaccineRequestsForLaterProcessing(appointment.getId(), vaccineRequests);
         }
+        
+        // For pre-paid appointments, process the vaccine requests immediately in the loop below
+        // Don't try to get them from the repository, as they will be directly processed
         
         // Process vaccine requests for both online and offline payments
         // The difference is that for online payments, we don't create VaccineOfChild records yet
@@ -255,6 +272,21 @@ public class AppointmentService {
 
         appointment.getAppointmentVaccines().add(appointmentVaccine);
         log.info("Added new vaccine to appointment: {}", vaccine.getName());
+        
+        // Check if this is a pre-paid appointment
+        boolean isPrepaid = appointment.getStatus() == AppointmentStatus.PAID;
+        
+        // If pre-paid, process the new vaccine immediately
+        if (isPrepaid) {
+            log.info("Pre-paid appointment - processing new vaccine immediately: {}", vaccine.getName());
+            try {
+                processNewVaccineAfterPayment(appointment, new PendingVaccineRequest(appointment.getId(), request));
+            } catch (Exception e) {
+                log.error("Error processing pre-paid new vaccine: {}", e.getMessage(), e);
+            }
+        } else {
+            log.info("New vaccine will be processed after payment: {}", vaccine.getName());
+        }
     }
 
     private void processNextDoseOffline(Appointment appointment, AppointmentVaccineRequest request) {
@@ -314,7 +346,20 @@ public class AppointmentService {
         appointment.getAppointmentVaccines().add(comboEntry);
         log.info("Added combo entry to appointment: {}", combo.getComboName());
         
-        // Individual vaccine entries for the combo will be created after payment is processed
+        // Check if this is a pre-paid appointment
+        boolean isPrepaid = appointment.getStatus() == AppointmentStatus.PAID;
+        
+        // If pre-paid, process the vaccine combo immediately
+        if (isPrepaid) {
+            log.info("Pre-paid appointment - processing vaccine combo immediately: {}", combo.getComboName());
+            try {
+                processVaccineComboAfterPayment(appointment, new PendingVaccineRequest(appointment.getId(), request));
+            } catch (Exception e) {
+                log.error("Error processing pre-paid vaccine combo: {}", e.getMessage(), e);
+            }
+        } else {
+            log.info("Vaccine combo will be processed after payment: {}", combo.getComboName());
+        }
     }
 
     private void calculateTotalAmount(Appointment appointment) {
@@ -493,7 +538,7 @@ public class AppointmentService {
             .child(appointment.getChild())
             .vaccine(vaccine)
             .totalDoses(parseDosage(vaccine.getDosage()))
-            .currentDose(1) // Set to 1 since first dose is being administered
+            .currentDose(0) // Initialize at 0, will be incremented when administered
             .isCompleted(false)
             .startDate(LocalDateTime.now())
             .isFromCombo(false)
@@ -621,6 +666,18 @@ public class AppointmentService {
         doseScheduleRepository.save(doseSchedule);
         log.info("Updated dose schedule with ID: {} - marked as paid and scheduled", doseSchedule.getId());
         
+        // Update the currentDose counter to match the administered dose
+        vaccineOfChild.setCurrentDose(doseSchedule.getDoseNumber());
+        
+        // Check if this completes the vaccination schedule
+        if (vaccineOfChild.getCurrentDose() >= vaccineOfChild.getTotalDoses()) {
+            vaccineOfChild.setIsCompleted(true);
+            log.info("Marked VaccineOfChild as completed: {}", vaccineOfChild.getId());
+        }
+        
+        vaccineOfChildRepository.save(vaccineOfChild);
+        log.info("Updated VaccineOfChild currentDose to: {}", vaccineOfChild.getCurrentDose());
+        
         // Update status of any existing AppointmentVaccine entries for this dose
         for (AppointmentVaccine av : appointment.getAppointmentVaccines()) {
             if (av.getVaccineOfChild() != null && 
@@ -637,6 +694,20 @@ public class AppointmentService {
         }
     }
 
+    /**
+     * Process all individual vaccines in a combo after payment
+     * 
+     * This method:
+     * 1. Creates VaccineOfChild records for each vaccine in the combo
+     * 2. Uses total_dose from ComboDetail for each vaccine (which may differ from the vaccine's standard doses)
+     * 3. Creates dose schedules for each dose:
+     *    - First dose: SCHEDULED with appointment date
+     *    - Subsequent doses: UNSCHEDULED with null date
+     * 4. Links the first doses to the appointment
+     * 
+     * @param appointment The appointment being processed
+     * @param request The pending vaccine request containing the combo ID
+     */
     private void processVaccineComboAfterPayment(Appointment appointment, PendingVaccineRequest request) {
         VaccineCombo combo = vaccineComboRepository.findById(request.getComboId())
             .orElseThrow(() -> new AppException(ErrorCode.COMBO_NOT_FOUND));
@@ -659,7 +730,7 @@ public class AppointmentService {
             .child(appointment.getChild())
             .vaccine(representativeVaccine)
             .totalDoses(1) // For the combo as a whole
-            .currentDose(1)
+            .currentDose(0) // Initialize at 0, will be incremented when administered
             .isCompleted(false)
             .startDate(LocalDateTime.now())
             .isFromCombo(true)
@@ -696,7 +767,7 @@ public class AppointmentService {
             log.info("Created new combo entry AppointmentVaccine for combo: {}", combo.getComboName());
         }
         
-        // Process each vaccine in the combo
+        // Process each individual vaccine in the combo
         for (ComboDetail detail : comboDetails) {
             Vaccine vaccine = detail.getVaccine();
             if (vaccine == null) {
@@ -705,66 +776,105 @@ public class AppointmentService {
             }
             
             // Get total doses from ComboDetail - this is specific to this vaccine in this combo
+            // This is crucial as the total doses may differ from the vaccine's standard doses
             int totalDoses = detail.getTotalDose();
             log.info("Processing vaccine {} with total doses: {} in combo", vaccine.getName(), totalDoses);
             
-            // Check if child already has this vaccine from this combo
-            boolean exists = vaccineOfChildRepository.existsByChildAndVaccineIdAndIsFromComboTrue(
+            // Check if child already has this vaccine from this specific combo
+            // Using child ID, vaccine ID, and combo ID to be more specific
+            List<VaccineOfChild> existingRecords = vaccineOfChildRepository.findByChildAndVaccineAndVaccineCombo(
                 appointment.getChild(), 
-                vaccine.getId()
+                vaccine,
+                combo
             );
             
-            if (exists) {
-                log.info("Child already has vaccine {} from combo, skipping", vaccine.getName());
-                continue; // Skip if already exists
+            VaccineOfChild vaccineOfChild;
+            if (!existingRecords.isEmpty()) {
+                // If the child already has this vaccine from this combo, update the existing record
+                log.info("Child already has vaccine {} from combo {}, updating existing record", 
+                    vaccine.getName(), combo.getComboName());
+                vaccineOfChild = existingRecords.get(0);
+                
+                // Check if we need to update the record (e.g., if total doses changed)
+                if (vaccineOfChild.getTotalDoses() != totalDoses) {
+                    vaccineOfChild.setTotalDoses(totalDoses);
+                    vaccineOfChild.setIsCompleted(vaccineOfChild.getCurrentDose() >= totalDoses);
+                    vaccineOfChild = vaccineOfChildRepository.save(vaccineOfChild);
+                    log.info("Updated existing VaccineOfChild record with new total doses: {}", totalDoses);
+                }
+            } else {
+                // Create new VaccineOfChild for individual vaccine with total doses from ComboDetail
+                vaccineOfChild = VaccineOfChild.builder()
+                    .child(appointment.getChild())
+                    .vaccine(vaccine)
+                    .totalDoses(totalDoses) // Using total doses from ComboDetail, not the vaccine's standard doses
+                    .currentDose(0) // Start at 0, will be incremented for first dose
+                    .isCompleted(false)
+                    .startDate(LocalDateTime.now())
+                    .isFromCombo(true)
+                    .vaccineCombo(combo) // Link back to the combo for tracking
+                    .build();
+                
+                vaccineOfChild = vaccineOfChildRepository.save(vaccineOfChild);
+                log.info("Created new VaccineOfChild with ID: {} for vaccine: {}", vaccineOfChild.getId(), vaccine.getName());
             }
             
-            // Create VaccineOfChild for individual vaccine with total doses from ComboDetail
-            VaccineOfChild vaccineOfChild = VaccineOfChild.builder()
-                .child(appointment.getChild())
-                .vaccine(vaccine)
-                .totalDoses(totalDoses) // Using total doses from ComboDetail
-                .currentDose(1) // Set to 1 since first dose is being administered
-                .isCompleted(totalDoses == 1) // If only one dose, mark as completed
-                .startDate(LocalDateTime.now())
-                .completionDate(totalDoses == 1 ? LocalDateTime.now() : null)
-                .isFromCombo(true)
-                .vaccineCombo(combo)
-                .build();
-            
-            vaccineOfChild = vaccineOfChildRepository.save(vaccineOfChild);
-            log.info("Created VaccineOfChild with ID: {} for vaccine: {}", vaccineOfChild.getId(), vaccine.getName());
-            
-            // Create dose schedules for all doses
+            // Create dose schedules for all doses of this vaccine
             for (int doseNumber = 1; doseNumber <= totalDoses; doseNumber++) {
                 try {
-                    // First dose is on appointment date, others are unscheduled
-                    LocalDateTime scheduledDate = null;
-                    DoseStatus status;
+                    // Check if dose schedule already exists for this dose
+                    Optional<DoseSchedule> existingDoseSchedule = doseScheduleRepository.findByVaccineOfChildAndDoseNumber(
+                        vaccineOfChild, doseNumber);
                     
-                    if (doseNumber == 1) {
-                        // For first dose, use the appointment date
-                        scheduledDate = appointment.getAppointmentTime();
-                        status = DoseStatus.SCHEDULED;
-                    } else {
-                        // For subsequent doses, try to calculate based on intervals
-                        DoseInterval interval = doseIntervalRepository.findByVaccineAndFromDose(vaccine, doseNumber - 1);
-                        if (interval != null) {
-                            // Calculate date based on appointment date
-                            scheduledDate = appointment.getAppointmentTime().plusDays(interval.getIntervalDays());
-                            status = DoseStatus.SCHEDULED;
-                        } else {
-                            // If no interval found, leave unscheduled as requested
-                            status = DoseStatus.UNSCHEDULED;
+                    if (existingDoseSchedule.isPresent()) {
+                        log.info("Dose schedule already exists for vaccine: {}, dose: {}, skipping creation", 
+                            vaccine.getName(), doseNumber);
+                        
+                        // If it's the first dose, make sure it's linked to this appointment
+                        if (doseNumber == 1) {
+                            DoseSchedule firstDose = existingDoseSchedule.get();
+                            
+                            // Set all doses of combo vaccines to UNSCHEDULED with null dates
+                            firstDose.setIsPaid(true); // First dose is paid, but still UNSCHEDULED
+                            firstDose.setStatus(String.valueOf(DoseStatus.UNSCHEDULED));
+                            firstDose.setScheduledDate(null); // Explicitly set to null
+                            doseScheduleRepository.save(firstDose);
+                            
+                            // We don't automatically update currentDose on VaccineOfChild here
+                            // It will be incremented after actual administration
+                            
+                            // Link the dose schedule to an appointment vaccine
+                            linkDoseScheduleToAppointment(appointment, vaccineOfChild, vaccine, firstDose, combo);
+                            
+                            log.info("Updated existing first dose schedule to UNSCHEDULED for combo vaccine: {}", 
+                                vaccine.getName());
                         }
+                        
+                        continue;
+                    }
+                    
+                    // First dose is on appointment date, others are unscheduled with null date
+                    LocalDate scheduledDate = null; // Always null for all doses
+                    DoseStatus status = DoseStatus.UNSCHEDULED; // Always UNSCHEDULED for all doses
+                    
+                    // Update the currentDose counter for the first dose
+                    if (doseNumber == 1) {
+                        // We don't update currentDose here anymore - it will be incremented when the dose is administered
+                        // Log that we're creating the first unscheduled dose
+                        log.info("Creating first unscheduled dose for vaccine {} in combo {}", 
+                            vaccine.getName(), combo.getComboName());
+                    } else {
+                        // Log that we're creating an unscheduled dose
+                        log.info("Creating unscheduled dose {} for vaccine {} in combo {}", 
+                            doseNumber, vaccine.getName(), combo.getComboName());
                     }
                     
                     // Create dose schedule with proper status
                     DoseSchedule doseSchedule = DoseSchedule.builder()
                         .vaccineOfChild(vaccineOfChild)
                         .doseNumber(doseNumber)
-                        .scheduledDate(LocalDate.from(scheduledDate))
-                        .status(status) // Set the status explicitly
+                        .scheduledDate(scheduledDate) // Always null for all doses
+                        .status(DoseStatus.valueOf(String.valueOf(status))) // Always UNSCHEDULED for all doses
                         .isPaid(doseNumber == 1) // Only first dose is paid for combo vaccines
                         .build();
                     
@@ -774,40 +884,7 @@ public class AppointmentService {
                     
                     // For the first dose, link it to an AppointmentVaccine entry
                     if (doseNumber == 1) {
-                        // Look for an existing appointment vaccine entry for this vaccine from the combo
-                        boolean foundExisting = false;
-                        for (AppointmentVaccine av : appointment.getAppointmentVaccines()) {
-                            // Find matching vaccine entries that are from combo and don't have vaccineOfChild set
-                            if (av.getVaccine() != null && 
-                                av.getVaccine().getId().equals(vaccine.getId()) &&
-                                Boolean.TRUE.equals(av.getFromCombo()) &&
-                                av.getVaccineOfChild() == null) {
-                                
-                                // Update existing entry
-                                av.setVaccineOfChild(vaccineOfChild);
-                                av.setDoseSchedule(doseSchedule);
-                                log.info("Updated existing AppointmentVaccine for combo vaccine: {}", vaccine.getName());
-                                foundExisting = true;
-                                break;
-                            }
-                        }
-                        
-                        // If no existing entry found, create a new one
-                        if (!foundExisting) {
-                            AppointmentVaccine appointmentVaccine = AppointmentVaccine.builder()
-                                .appointment(appointment)
-                                .vaccineOfChild(vaccineOfChild)
-                                .vaccine(vaccine)
-                                .doseSchedule(doseSchedule)
-                                .doseNumber(doseNumber)
-                                .status(VaccinationStatus.PENDING)
-                                .fromCombo(true)
-                                .vaccineCombo(combo)
-                                .build();
-                            
-                            appointment.getAppointmentVaccines().add(appointmentVaccine);
-                            log.info("Created new AppointmentVaccine for combo vaccine: {}", vaccine.getName());
-                        }
+                        linkDoseScheduleToAppointment(appointment, vaccineOfChild, vaccine, doseSchedule, combo);
                     }
                 } catch (Exception e) {
                     log.error("Error creating dose schedule for vaccine: {}, dose: {}: {}", 
@@ -819,6 +896,48 @@ public class AppointmentService {
         // Save the appointment to persist all the new vaccines and dose schedules
         appointmentRepository.save(appointment);
         log.info("Successfully processed vaccine combo: {} after payment", combo.getComboName());
+    }
+    
+    /**
+     * Helper method to link a dose schedule to an appointment
+     */
+    private void linkDoseScheduleToAppointment(Appointment appointment, VaccineOfChild vaccineOfChild, 
+                                              Vaccine vaccine, DoseSchedule doseSchedule, VaccineCombo combo) {
+        // Look for an existing appointment vaccine entry for this vaccine from the combo
+        boolean foundExisting = false;
+        for (AppointmentVaccine av : appointment.getAppointmentVaccines()) {
+            // Find matching vaccine entries that are from combo and match the vaccine
+            if (av.getVaccine() != null && 
+                av.getVaccine().getId().equals(vaccine.getId()) &&
+                Boolean.TRUE.equals(av.getFromCombo())) {
+                
+                // Update existing entry
+                av.setVaccineOfChild(vaccineOfChild);
+                av.setDoseSchedule(doseSchedule);
+                av.setDoseNumber(doseSchedule.getDoseNumber());
+                av.setStatus(String.valueOf(VaccinationStatus.PENDING));
+                log.info("Updated existing AppointmentVaccine for combo vaccine: {}", vaccine.getName());
+                foundExisting = true;
+                break;
+            }
+        }
+        
+        // If no existing entry found, create a new one
+        if (!foundExisting) {
+            AppointmentVaccine appointmentVaccine = AppointmentVaccine.builder()
+                .appointment(appointment)
+                .vaccineOfChild(vaccineOfChild)
+                .vaccine(vaccine)
+                .doseSchedule(doseSchedule)
+                .doseNumber(doseSchedule.getDoseNumber())
+                .status(VaccinationStatus.PENDING)
+                .fromCombo(true)
+                .vaccineCombo(combo)
+                .build();
+            
+            appointment.getAppointmentVaccines().add(appointmentVaccine);
+            log.info("Created new AppointmentVaccine for combo vaccine: {}", vaccine.getName());
+        }
     }
 
     // Add a helper method to parse dosage strings
@@ -886,6 +1005,22 @@ public class AppointmentService {
                         doseSchedule.setIsPaid(true);
                         doseScheduleRepository.save(doseSchedule);
                         log.info("Marked DoseSchedule as paid: {}", doseSchedule.getId());
+                        
+                        // Update currentDose in the VaccineOfChild when a dose is paid
+                        VaccineOfChild vaccineOfChild = doseSchedule.getVaccineOfChild();
+                        if (vaccineOfChild != null) {
+                            // Increment the currentDose counter to match the administered dose
+                            vaccineOfChild.setCurrentDose(doseSchedule.getDoseNumber());
+                            
+                            // Check if this completes the vaccination schedule
+                            if (vaccineOfChild.getCurrentDose() >= vaccineOfChild.getTotalDoses()) {
+                                vaccineOfChild.setIsCompleted(true);
+                                log.info("Marked VaccineOfChild as completed: {}", vaccineOfChild.getId());
+                            }
+                            
+                            vaccineOfChildRepository.save(vaccineOfChild);
+                            log.info("Updated VaccineOfChild currentDose to: {}", vaccineOfChild.getCurrentDose());
+                        }
                     }
                     
                     // Update vaccination status
@@ -921,6 +1056,18 @@ public class AppointmentService {
         log.info("Found VaccineOfChild with ID: {} and DoseSchedule with ID: {}", 
             vaccineOfChild.getId(), doseSchedule.getId());
         
+        // Check if this is a pre-paid appointment
+        boolean isPrepaid = appointment.getStatus() == AppointmentStatus.PAID;
+        
+        // If pre-paid, update the dose schedule immediately
+        if (isPrepaid) {
+            log.info("Pre-paid appointment - marking dose schedule as paid immediately");
+            doseSchedule.setIsPaid(true);
+            doseSchedule.setStatus(String.valueOf(DoseStatus.SCHEDULED));
+            doseSchedule.setScheduledDate(appointment.getAppointmentTime().toLocalDate());
+            doseScheduleRepository.save(doseSchedule);
+        }
+        
         // Create AppointmentVaccine record with doseSchedule properly set
         AppointmentVaccine appointmentVaccine = AppointmentVaccine.builder()
             .appointment(appointment)
@@ -932,8 +1079,8 @@ public class AppointmentService {
             .build();
         
         appointment.getAppointmentVaccines().add(appointmentVaccine);
-        log.info("Added next dose to appointment: {}, doseNumber: {}", 
-            vaccineOfChild.getVaccine().getName(), doseSchedule.getDoseNumber());
+        log.info("Added next dose to appointment: {}, doseNumber: {}, isPaid: {}", 
+            vaccineOfChild.getVaccine().getName(), doseSchedule.getDoseNumber(), isPrepaid); 
     }
 
     // Helper method to calculate the scheduled date for a dose

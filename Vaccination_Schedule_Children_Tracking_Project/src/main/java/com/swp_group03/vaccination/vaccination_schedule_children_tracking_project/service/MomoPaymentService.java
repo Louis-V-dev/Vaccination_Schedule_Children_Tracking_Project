@@ -379,72 +379,116 @@ public class MomoPaymentService {
     }
     
     /**
-     * Process IPN (Instant Payment Notification) callback from MoMo
-     * @param callbackData The callback data from MoMo
+     * Process IPN callback from MoMo
+     * @param requestMap The request parameters from MoMo IPN callback
      */
-    public void processIpnCallback(Map<String, Object> callbackData) {
+    public void processIpnCallback(Map<String, Object> requestMap) {
         try {
-            // Log the callback data for debugging
-            System.out.println("Received IPN callback: " + callbackData);
+            System.out.println("Processing IPN callback: " + requestMap);
             
-            // Extract data from the callback
-            String orderId = (String) callbackData.get("orderId");
-            String requestId = (String) callbackData.get("requestId");
-            String amount = callbackData.get("amount").toString();
-            String resultCode = callbackData.get("resultCode").toString();
-            String message = (String) callbackData.get("message");
-            String extraData = (String) callbackData.get("extraData");
+            // Extract data from request
+            String orderId = (String) requestMap.getOrDefault("orderId", "");
+            String transId = (String) requestMap.getOrDefault("transId", "");
+            Integer resultCode = requestMap.get("resultCode") instanceof Integer ? 
+                (Integer) requestMap.get("resultCode") : 
+                Integer.parseInt(requestMap.get("resultCode").toString());
+            Long amount = requestMap.get("amount") instanceof Long ? 
+                (Long) requestMap.get("amount") : 
+                Long.parseLong(requestMap.get("amount").toString());
             
-            // Verify signature to ensure the callback is from MoMo
-            // ... Code to verify signature
+            // Extract appointment ID from orderId or extraData
+            String extraData = (String) requestMap.getOrDefault("extraData", "");
+            Long appointmentId = null;
             
-            // Get payment from database
-            Optional<Payment> paymentOpt = paymentRepository.findByTransactionId(orderId);
-            if (paymentOpt.isEmpty()) {
-                System.out.println("Payment not found for orderId: " + orderId);
-                return;
+            if (orderId.startsWith("appointment-")) {
+                try {
+                    appointmentId = Long.parseLong(orderId.substring("appointment-".length()));
+                } catch (NumberFormatException e) {
+                    System.err.println("Failed to parse appointmentId from orderId: " + orderId);
+                }
             }
             
-            Payment payment = paymentOpt.get();
-            
-            // Update payment status based on result code
-            if ("0".equals(resultCode)) {
-                // Payment successful
-                payment.setStatus(PaymentStatus.COMPLETED);
-                
-                // Parse appointmentId from extraData
-                Long appointmentId = null;
+            if (appointmentId == null && !extraData.isEmpty()) {
                 try {
                     appointmentId = Long.parseLong(extraData);
                 } catch (NumberFormatException e) {
                     System.err.println("Failed to parse appointmentId from extraData: " + extraData);
                 }
-                
-                if (appointmentId != null) {
-                    // Find appointment by ID
-                    Optional<Appointment> appointmentOpt = appointmentRepository.findById(appointmentId);
-                    if (appointmentOpt.isPresent()) {
-                        Appointment appointment = appointmentOpt.get();
-                        appointment.setStatus(AppointmentStatus.PAID);
-                        appointment.setPaid(true);
-                        appointmentRepository.save(appointment);
-                        
-                        // Create VaccineOfChild and DoseSchedule records if needed
-                        appointmentService.processSuccessfulPayment(appointment);
-                    } else {
-                        System.err.println("Appointment not found with ID: " + appointmentId);
-                    }
-                }
-            } else {
-                // Payment failed
-                payment.setStatus(PaymentStatus.FAILED);
-                payment.setNotes("MoMo result code: " + resultCode + " - " + message);
             }
             
-            // Save updated payment
-            paymentRepository.save(payment);
+            if (appointmentId == null) {
+                System.err.println("Could not determine appointment ID from request: " + requestMap);
+                return;
+            }
             
-            System.out.println("IPN processing completed for orderId: " + orderId);
+            // Find appointment
+            Optional<Appointment> appointmentOpt = appointmentRepository.findById(appointmentId);
+            if (appointmentOpt.isEmpty()) {
+                System.err.println("Appointment not found with ID: " + appointmentId);
+                return;
+            }
+            
+            Appointment appointment = appointmentOpt.get();
+            
+            // Check if payment already exists
+            Payment payment = null;
+            if (appointment.getPayment() != null) {
+                payment = appointment.getPayment();
+                System.out.println("Found existing payment for appointment: " + payment.getId());
+            } else {
+                // Try to find payment by transaction ID
+                Optional<Payment> paymentOpt = paymentRepository.findByTransactionId(orderId);
+                if (paymentOpt.isPresent()) {
+                    payment = paymentOpt.get();
+                    System.out.println("Found payment by transaction ID: " + payment.getId());
+                }
+            }
+            
+            // Create payment if it doesn't exist
+            if (payment == null) {
+                System.out.println("Creating new payment record for IPN");
+                
+                payment = Payment.builder()
+                    .user(appointment.getChild().getAccount_Id())
+                    .amount(BigDecimal.valueOf(amount))
+                    .totalAmount(BigDecimal.valueOf(amount))
+                    .transactionId(orderId)
+                    .gatewayTransactionId(transId)
+                    .build();
+                
+                // Get payment method (MoMo)
+                Optional<PaymentMethod> paymentMethodOpt = paymentMethodRepository.findByCode("MOMO");
+                if (paymentMethodOpt.isPresent()) {
+                    payment.setPaymentMethod(paymentMethodOpt.get());
+                }
+            }
+            
+            // Update payment status based on result code
+            if (resultCode == 0) {
+                payment.setStatus(PaymentStatus.COMPLETED);
+                payment.setPaymentDate(LocalDateTime.now());
+                System.out.println("Payment marked as COMPLETED from IPN");
+            } else {
+                payment.setStatus(PaymentStatus.FAILED);
+                payment.setGatewayResponse("Payment failed with code: " + resultCode);
+                System.out.println("Payment marked as FAILED from IPN");
+            }
+            
+            // Save payment
+            payment = paymentRepository.save(payment);
+            
+            // Update appointment if payment is successful
+            if (resultCode == 0) {
+                appointment.setPayment(payment);
+                appointment.setPaid(true);
+                appointment.setStatus(AppointmentStatus.PAID);
+                appointmentRepository.save(appointment);
+                
+                // Process vaccine requests
+                appointmentService.processVaccinesAfterPayment(appointmentId);
+                System.out.println("Processed vaccines after payment for appointment: " + appointmentId);
+            }
+            
         } catch (Exception e) {
             System.err.println("Error processing IPN callback: " + e.getMessage());
             e.printStackTrace();

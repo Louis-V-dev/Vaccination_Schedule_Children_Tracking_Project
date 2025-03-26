@@ -228,10 +228,14 @@ class AppointmentService {
       const formattedData = {
         ...appointmentData,
         // Make sure the isOfflinePayment flag is explicitly set based on payment method
-        isOfflinePayment: appointmentData.paymentMethod === 'OFFLINE'
+        isOfflinePayment: appointmentData.paymentMethod === 'OFFLINE',
+        // Ensure isPaid flag is included and properly formatted as a boolean
+        isPaid: Boolean(appointmentData.isPaid === true || appointmentData.isPaid === "true")
       };
       
       console.log('Creating appointment with formattedData:', formattedData);
+      console.log('isPaid value being sent:', formattedData.isPaid, '(type:', typeof formattedData.isPaid, ')');
+      console.log('Original isPaid value from client:', appointmentData.isPaid, '(type:', typeof appointmentData.isPaid, ')');
       
       // Handle both vaccines array (old format) and vaccineRequests array (new format)
       if (appointmentData.vaccines) {
@@ -887,117 +891,61 @@ class AppointmentService {
         resultCode: 0, // Success code
         transId: consistentTransId,
         amount: appointment?.totalAmount || 0,
-        paymentMethod: 'MOMO',
+        paymentMethod: 'MOMO', // This is the payment processor, not the appointment payment method type
+        paymentType: 'ONLINE', // Explicitly specify this was an online payment
         status: 'COMPLETED',
         paymentStatus: 'COMPLETED',
         paymentDate: new Date().toISOString(),
         directUpdate: true, // Flag to indicate this is a direct update call
-        appointmentId: appointmentId // Explicitly include the appointmentId
+        appointmentId: appointmentId, // Explicitly include the appointmentId
+        forcePaymentMethod: 'ONLINE' // Force the payment method to be recorded as ONLINE
       };
       
       console.log('Attempting direct payment record update:', directPaymentData);
       
+      // Make the record payment call
       try {
-        // Call payments/record endpoint directly
-        const directResponse = await axios.post(`${API_URL}/payments/record`, directPaymentData, {
+        const recordResponse = await axios.post(`${API_URL}/payments/record`, directPaymentData, {
           headers: getAuthHeaders()
         });
-        console.log('Direct payment record response:', directResponse.data);
-        
-        // If direct payment record was successful, we can return early
-        if (directResponse.data && directResponse.data.success) {
-          return {
-            success: true,
-            message: 'Payment recorded and appointment marked as paid successfully',
-            data: directResponse.data
-          };
-        }
-      } catch (directError) {
-        console.warn('Direct payment record failed, continuing with regular flow:', directError.message);
+        console.log('Direct payment record response:', recordResponse.data);
+      } catch (recordError) {
+        console.error('Error during direct payment record update:', recordError.message);
       }
       
-      // Create payment data to send to the appointment paid endpoint
-      const paymentData = {
-        paymentMethod: 'MOMO',
-        paymentStatus: 'COMPLETED',
-        paymentReference: consistentTransId,
-        paymentDate: new Date().toISOString(),
-        status: 'PAID'
-      };
-      
-      console.log('Sending payment data to mark appointment as paid:', paymentData);
-      
-      // Try the more comprehensive PUT endpoint first
+      // Then make the explicit call to mark appointment as paid
+      console.log('Now explicitly marking appointment as paid via direct endpoint...');
       try {
-        const response = await axios.put(`${API_URL}/appointments/${appointmentId}/paid`, paymentData, {
+        const markPaidResponse = await axios.post(`${API_URL}/appointments/${appointmentId}/mark-paid`, {
+          paymentMethod: 'ONLINE' // Explicitly set as ONLINE payment
+        }, {
           headers: getAuthHeaders()
         });
         
-        console.log('Appointment marked as paid via PUT /appointments/{id}/paid:', response.data);
+        console.log('Mark paid API response:', markPaidResponse.data);
+        return markPaidResponse.data;
+      } catch (markPaidError) {
+        console.error('Error marking appointment as paid via API:', markPaidError.message);
         
-        return {
-          success: true,
-          message: 'Appointment marked as paid successfully',
-          data: response.data
-        };
-      } catch (putError) {
-        console.warn('PUT to /appointments/{id}/paid failed, trying fallback endpoint:', putError.message);
-        
-        // Fallback to the original endpoint if PUT fails
+        // Try alternate endpoint
+        console.log('Trying alternate paid endpoint...');
         try {
-          const fallbackResponse = await axios.post(`${API_URL}/appointments/${appointmentId}/mark-paid`, paymentData, {
+          const altResponse = await axios.put(`${API_URL}/appointments/${appointmentId}/paid`, {
+            paymentMethod: 'ONLINE' // Explicitly set as ONLINE payment
+          }, {
             headers: getAuthHeaders()
           });
           
-          console.log('Appointment marked as paid via fallback endpoint:', fallbackResponse.data);
-          
-          return {
-            success: true,
-            message: 'Appointment marked as paid successfully via fallback endpoint',
-            data: fallbackResponse.data
-          };
-        } catch (fallbackError) {
-          console.error('Both endpoints failed for marking appointment as paid:', fallbackError.message);
-          
-          // Try to create a record in payment table even if appointment update fails
-          try {
-            // Last resort - try to create a payment record directly
-            const emergencyPayload = {
-              orderInfo: `Payment for appointment #${appointmentId}`,
-              resultCode: 0,
-              transId: consistentTransId, // Use consistent transaction ID
-              amount: appointment?.totalAmount || 0,
-              paymentMethod: 'MOMO',
-              paymentStatus: 'COMPLETED',
-              paymentDate: new Date().toISOString(),
-              emergency: true, // Flag to indicate this is an emergency update
-              appointmentId: appointmentId // Include the appointment ID explicitly
-            };
-            
-            const emergencyResponse = await axios.post(`${API_URL}/payments/record`, emergencyPayload, {
-              headers: getAuthHeaders()
-            });
-            
-            console.log('Created payment record as emergency fallback:', emergencyResponse.data);
-            
-            return {
-              success: true,
-              message: 'Created payment record via emergency fallback',
-              data: emergencyResponse.data
-            };
-          } catch (emergencyError) {
-            console.error('All attempts to mark appointment as paid failed:', emergencyError.message);
-            throw fallbackError; // Rethrow the original error
-          }
+          console.log('Alternate paid endpoint response:', altResponse.data);
+          return altResponse.data;
+        } catch (altError) {
+          console.error('Alternate paid endpoint also failed:', altError.message);
+          throw altError;
         }
       }
     } catch (error) {
-      console.error('Error marking appointment as paid:', error);
-      return {
-        success: false,
-        message: error.message || 'Failed to mark appointment as paid',
-        _error: error
-      };
+      console.error('Payment update failed completely:', error.message);
+      throw error;
     }
   }
 

@@ -14,4 +14,5 @@ public class CreateAppointmentRequest {
     private List<AppointmentVaccineRequest> vaccines;
     private String paymentMethod; // "ONLINE" or "OFFLINE"
     private String notes;
+    private Boolean isPaid; // true if all vaccines are already paid
 } 

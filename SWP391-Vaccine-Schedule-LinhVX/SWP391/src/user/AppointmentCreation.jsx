@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useContext, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Container, Card, Button, Form, Row, Col, ProgressBar, Alert, Badge, Spinner, ListGroup, Toast } from 'react-bootstrap';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCalendarPlus, faSpinner, faCheck, faSyringe, faClock, faUser, faCalendarAlt, faMoneyBill, faHome, faArrowLeft, faArrowRight, faFemale, faMale, faChild, faExclamationTriangle, faCheckCircle, faInfoCircle, faCreditCard } from '@fortawesome/free-solid-svg-icons';
+import { faCalendarPlus, faSpinner, faCheck, faSyringe, faClock, faUser, faCalendarAlt, faMoneyBill, faHome, faArrowLeft, faArrowRight, faFemale, faMale, faChild, faExclamationTriangle, faCheckCircle, faInfoCircle, faCreditCard, faTag } from '@fortawesome/free-solid-svg-icons';
 import { Link, useNavigate } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import appointmentService from '../services/appointmentService';
@@ -258,7 +258,7 @@ const AppointmentCreation = () => {
     }, []);
     
     // Update the fetchChildVaccineData function
-    const fetchChildVaccineData = async () => {
+        const fetchChildVaccineData = async () => {
         if (!selectedChild) {
             console.warn('No child selected, cannot fetch vaccine data');
             return;
@@ -268,41 +268,35 @@ const AppointmentCreation = () => {
             console.warn('No appointment type selected, cannot fetch vaccine data');
             return;
         }
-        
-        try {
-            saveScrollPosition();
+            
             setIsLoadingVaccineData(true);
+        setError('');
+        
+            try {
             console.log(`Fetching vaccine data for child ${selectedChild} and type ${appointmentType}`);
             
-            let endpoint = '';
-            if (appointmentType === 'NEW_VACCINE') {
-                endpoint = `${API_URL}/api/v1/appointment/available-vaccines/${selectedChild}`;
-            } else if (appointmentType === 'NEXT_DOSE') {
-                endpoint = `${API_URL}/api/v1/appointment/next-doses/${selectedChild}`;
-            } else if (appointmentType === 'COMBO') {
-                endpoint = `${API_URL}/api/v1/appointment/available-combos/${selectedChild}`;
-            }
+            // Call the API
+                const response = await appointmentService.getChildVaccineData(selectedChild, appointmentType);
             
-            const response = await fetch(endpoint, {
-                headers: {
-                    'Authorization': `Bearer ${user.token}`
-                }
-            });
+            // Log raw response data for debugging
+            console.log('Raw API response:', response);
             
-            if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
+            // Process and validate the data
+            const processedData = ensureValidVaccineData(response);
+            console.log('Processed vaccine data:', processedData);
             
-            const data = await response.json();
-            setChildVaccineData(data);
-            setIsLoadingVaccineData(false);
-            restoreScrollPosition();
-        } catch (error) {
+            // Update state with processed data
+            setChildVaccineData(processedData);
+            
+            // Clear any selected vaccines when getting new data
+            setSelectedVaccines([]);
+            } catch (error) {
             console.error('Error fetching child vaccine data:', error);
-            setError('Failed to load available vaccines. Please try again later.');
-            setIsLoadingVaccineData(false);
-        }
-    };
+            setError(`Failed to load vaccine data: ${error.message}`);
+            } finally {
+                setIsLoadingVaccineData(false);
+            }
+        };
     
     // Load available slots based on selected date or doctor
     const fetchAvailableSlots = async () => {
@@ -495,11 +489,15 @@ const AppointmentCreation = () => {
                 paymentMethod: paymentMethod || 'ONLINE',
                 notes: notes || '',
                 // Explicitly set the isOfflinePayment flag for offline payments
-                isOfflinePayment: paymentMethod === 'OFFLINE'
+                isOfflinePayment: paymentMethod === 'OFFLINE',
+                // Add isPaid flag if all vaccines are already paid - ensure it's a proper boolean
+                isPaid: Boolean(isPrePaid === true)
             };
             
-            // Log the formatted request data
+            // Log the formatted request data with extra details about isPaid
             console.log('Formatted appointment request data:', requestData);
+            console.log('isPrePaid state:', isPrePaid, '(type:', typeof isPrePaid, ')');
+            console.log('isPaid value in request:', requestData.isPaid, '(type:', typeof requestData.isPaid, ')');
             
             // Create the appointment
             const appointment = await appointmentService.createAppointment(requestData);
@@ -507,6 +505,7 @@ const AppointmentCreation = () => {
             console.log('Appointment created successfully:', appointment);
             console.log('Payment method used:', paymentMethod);
             console.log('isOfflinePayment flag:', requestData.isOfflinePayment);
+            console.log('isPaid flag:', requestData.isPaid);
             
             // Check if the response indicates an error
             if (appointment.code === 5000) {
@@ -523,8 +522,14 @@ const AppointmentCreation = () => {
                 message: 'Appointment created successfully'
             });
 
+            // For pre-paid appointments (all vaccines already paid), skip payment process
+            if (isPrePaid) {
+                setCurrentStep(4);
+                setSuccess("Appointment created successfully with pre-paid vaccines!");
+                setIsSuccess(true);
+            }
             // For online payment, open the payment modal
-            if (paymentMethod === 'ONLINE') {
+            else if (paymentMethod === 'ONLINE') {
                 // Get the invoice total
                 const invoiceTotal = calculateInvoiceTotal();
                 
@@ -565,6 +570,19 @@ const AppointmentCreation = () => {
         setPaymentStatus('SUCCESS');
         setShowPaymentModal(false);
         setCurrentStep(4);
+        
+        // Explicitly update payment method to ONLINE on successful online payment
+        console.log('Setting payment method to ONLINE after successful payment');
+        setPaymentMethod('ONLINE');
+        
+        // Also update appointmentData to reflect the ONLINE payment
+        setAppointmentData(prevData => ({
+            ...prevData,
+            isPaid: true,
+            status: 'PAID',
+            paymentMethod: 'ONLINE',  // Force payment method to ONLINE
+            paymentStatus: 'COMPLETED'
+        }));
         
         console.log('Payment was successful, updating appointment and payment status');
         
@@ -880,7 +898,6 @@ const AppointmentCreation = () => {
     
     // Navigation functions
     const handleNext = () => {
-        saveScrollPosition();
         if (currentStep === 1) {
             if (!selectedChild) {
                 setError('Please select a child');
@@ -1061,18 +1078,11 @@ const AppointmentCreation = () => {
         
         setCurrentStep(currentStep + 1);
         setError('');
-        setTimeout(() => {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }, 100);
     };
 
     const handleBack = () => {
-        saveScrollPosition();
         setCurrentStep(currentStep - 1);
         setError('');
-        setTimeout(() => {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }, 100);
     };
     
     // Get the progress percentage based on current step
@@ -1185,275 +1195,647 @@ const AppointmentCreation = () => {
         );
     };
     
-    // Render Step 1: Select Child & Appointment Type
+    // Render Step 1: Appointment Type and Child Selection
     const renderStep1 = () => {
         return (
-            <Card className="mb-3 animated-card">
-                <Card.Header>
-                    <h4 className="m-0">Step 1: Select Child & Appointment Type</h4>
-                </Card.Header>
-                <Card.Body>
-                    <Form>
-                        <Form.Group className="mb-3">
-                            <Form.Label>Select Child</Form.Label>
-                            <Form.Control 
-                                as="select" 
-                                value={selectedChild || ''}
-                                onChange={(e) => handleChildSelect(e.target.value)}
-                                disabled={isLoading || isLoadingVaccineData}
-                            >
-                                <option value="">-- Select a child --</option>
-                                {children.map((child) => (
-                                    <option key={child.id} value={child.id}>
-                                        {child.name} (DoB: {formatDate(child.dob)})
-                                    </option>
-                                ))}
-                            </Form.Control>
-                            {!selectedChild && (
-                                <Alert variant="info" className="mt-2">
-                                    <FontAwesomeIcon icon={faInfoCircle} className="me-2" />
-                                    Please select a child to proceed with vaccination scheduling
-                                </Alert>
-                            )}
-                        </Form.Group>
-                        
-                        <Form.Group className="mb-3">
-                            <Form.Label>Appointment Type</Form.Label>
+            <>
+                <Form.Group className="mb-4">
+                    <Form.Label>Select Child</Form.Label>
+                    <Form.Select 
+                        value={selectedChild}
+                        onChange={(e) => setSelectedChild(e.target.value)}
+                        className="mb-3"
+                    >
+                        <option value="">-- Select a child --</option>
+                        {children.map(child => (
+                            <option key={child.child_id} value={child.child_id}>
+                                {child.child_name} ({child.gender}, {calculateAge(child.dob)} years old)
+                            </option>
+                        ))}
+                    </Form.Select>
+                </Form.Group>
+                
+                {!selectedChild ? (
+                    <Alert variant="warning">
+                        Please select a child first to view available vaccines.
+                    </Alert>
+                ) : (
+                    <>
+                <Form.Group className="mb-4">
+                    <Form.Label>Appointment Type</Form.Label>
                             <div>
-                                <Form.Check
-                                    type="radio"
-                                    id="appointmentType-new"
+                            <Form.Check
+                                    inline
+                                type="radio"
                                     label="New Vaccine"
-                                    name="appointmentType"
-                                    value="NEW_VACCINE"
-                                    checked={appointmentType === 'NEW_VACCINE'}
-                                    onChange={(e) => setAppointmentType(e.target.value)}
-                                    className="mb-2"
-                                    disabled={isLoading || isLoadingVaccineData || !selectedChild}
+                                name="appointmentType"
+                                    id="new-vaccine"
+                                checked={appointmentType === 'NEW_VACCINE'}
+                                    onChange={() => handleAppointmentTypeChange('NEW_VACCINE')}
                                 />
-                                <Form.Check
-                                    type="radio"
-                                    id="appointmentType-next"
+                            <Form.Check
+                                    inline
+                                type="radio"
                                     label="Next Dose"
-                                    name="appointmentType"
-                                    value="NEXT_DOSE"
-                                    checked={appointmentType === 'NEXT_DOSE'}
-                                    onChange={(e) => setAppointmentType(e.target.value)}
-                                    className="mb-2"
-                                    disabled={isLoading || isLoadingVaccineData || !selectedChild}
+                                name="appointmentType"
+                                    id="next-dose"
+                                checked={appointmentType === 'NEXT_DOSE'}
+                                    onChange={() => handleAppointmentTypeChange('NEXT_DOSE')}
                                 />
                                 <Form.Check
+                                    inline
                                     type="radio"
-                                    id="appointmentType-combo"
                                     label="Vaccine Combo"
                                     name="appointmentType"
-                                    value="COMBO"
-                                    checked={appointmentType === 'COMBO'}
-                                    onChange={(e) => setAppointmentType(e.target.value)}
-                                    className="mb-2"
-                                    disabled={isLoading || isLoadingVaccineData || !selectedChild}
+                                    id="vaccine-combo"
+                                    checked={appointmentType === 'VACCINE_COMBO'}
+                                    onChange={() => handleAppointmentTypeChange('VACCINE_COMBO')}
                                 />
                             </div>
-                        </Form.Group>
-                        
-                        {isLoadingVaccineData && (
-                            <div className="text-center my-4">
-                                <Spinner animation="border" variant="success" />
-                                <p className="mt-2">Loading available vaccines...</p>
-                            </div>
-                        )}
-                        
-                        {childVaccineData && childVaccineData.length > 0 && !isLoadingVaccineData && (
-                            <div className="mt-4">
-                                <h5 className="mb-3">Available Vaccines</h5>
+                </Form.Group>
+                
+                        {appointmentType && (
+                                    <div className="mt-4">
+                                <h5>Available {appointmentType.toLowerCase().replace('_', ' ')}s</h5>
                                 {renderAvailableVaccines()}
-                            </div>
+                    </div>
                         )}
-                        
-                        {childVaccineData && childVaccineData.length === 0 && !isLoadingVaccineData && (
-                            <Alert variant="info" className="mt-3">
-                                <FontAwesomeIcon icon={faInfoCircle} className="me-2" />
-                                No available vaccines found for this child under the selected appointment type.
-                            </Alert>
-                        )}
-                    </Form>
-                </Card.Body>
-            </Card>
+                    </>
+                )}
+
+                {/* Removed duplicate navigation buttons - they are handled by renderNavButtons */}
+            </>
         );
     };
     
-    // Render Step 2: Select Date, Time Slot, and Doctor
+    // Render Step 2: Schedule Selection
     const renderStep2 = () => {
         return (
-            <Card className="mb-3 animated-card">
-                <Card.Header>
-                    <h4 className="m-0">Step 2: Select Date, Time Slot, and Doctor</h4>
-                </Card.Header>
-                <Card.Body>
-                    {isLoading ? (
-                        <div className="text-center my-4">
-                            <Spinner animation="border" variant="success" />
-                            <p className="mt-2">Loading availability...</p>
-                        </div>
-                    ) : (
-                        <>
-                            <div className="mb-4">
-                                <h5 className="mb-3">Available Dates</h5>
-                                <div className="calendar-container">
-                                    {renderCalendar()}
-                                </div>
-                            </div>
-                            
-                            {selectedDate && (
-                                <>
-                                    <div className="mb-4">
-                                        <h5 className="mb-3">Available Time Slots</h5>
-                                        <div className="time-slots-grid">
-                                            {renderTimeSlots()}
-                                        </div>
+            <div className="booking-step">
+                <h4 className="mb-4">Schedule Your Appointment</h4>
+                
+                {/* Priority mode selector */}
+                <div className="mb-4">
+                    <h5>Select Priority</h5>
+                    <Row>
+                        <Col xs={12} sm={6}>
+                            <Card 
+                                onClick={() => setIsDayPriority(true)}
+                                className={`mb-3 ${isDayPriority === true ? 'selected' : ''}`}
+                                style={{ cursor: 'pointer', borderColor: isDayPriority === true ? '#007bff' : '#dee2e6' }}
+                            >
+                                <Card.Body className="d-flex align-items-center">
+                                    <div className="me-3">
+                                        <FontAwesomeIcon icon={faCalendarAlt} size="2x" color={isDayPriority === true ? '#007bff' : '#6c757d'} />
                                     </div>
-                                    
-                                    {selectedTimeSlot && (
-                                        <div className="mb-3">
-                                            <h5 className="mb-3">Available Doctors</h5>
-                                            <Row xs={1} md={2} lg={3} className="g-3">
-                                                {renderDoctors()}
-                                            </Row>
-                                        </div>
-                                    )}
-                                </>
-                            )}
-                        </>
-                    )}
-                </Card.Body>
-            </Card>
+                                    <div>
+                                        <Card.Title className="mb-1">Date First</Card.Title>
+                                        <Card.Text className="text-muted small mb-0">Choose your preferred date, then select from available time slots and doctors</Card.Text>
+                                    </div>
+                                </Card.Body>
+                            </Card>
+                        </Col>
+                        <Col xs={12} sm={6}>
+                            <Card 
+                                onClick={() => setIsDayPriority(false)}
+                                className={`mb-3 ${isDayPriority === false ? 'selected' : ''}`}
+                                style={{ cursor: 'pointer', borderColor: isDayPriority === false ? '#007bff' : '#dee2e6' }}
+                            >
+                                <Card.Body className="d-flex align-items-center">
+                                    <div className="me-3">
+                                        <FontAwesomeIcon icon={faUser} size="2x" color={isDayPriority === false ? '#007bff' : '#6c757d'} />
+                                    </div>
+                                    <div>
+                                        <Card.Title className="mb-1">Doctor First</Card.Title>
+                                        <Card.Text className="text-muted small mb-0">Choose your preferred doctor, then select from their available dates and time slots</Card.Text>
+                                    </div>
+                                </Card.Body>
+                            </Card>
+                        </Col>
+                    </Row>
+                </div>
+                
+                {/* Conditional rendering based on priority mode */}
+                {isDayPriority === true ? (
+                    <>
+                        {renderDateSelection()}
+                        {renderTimeSlotSelection()}
+                        
+                        {/* Make doctor selection optional for date-first mode */}
+                        <div className="mb-4">
+                            <Form.Check 
+                                type="checkbox" 
+                                id="doctor-selection-toggle" 
+                                label="I want to choose a specific doctor (optional)" 
+                                checked={showDoctorSelection}
+                                onChange={(e) => setShowDoctorSelection(e.target.checked)}
+                                className="mb-3"
+                            />
+                            {showDoctorSelection && renderDoctorSelection()}
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        {renderDoctorSelection()}
+                        {renderDateSelection()}
+                        {renderTimeSlotSelection()}
+                    </>
+                )}
+                
+                {/* Remove the duplicate navigation buttons here */}
+            </div>
         );
     };
     
-    // Render Step 3: Review & Payment
-    const renderStep3 = () => {
+    // Helper rendering components
+    const renderDateSelection = () => {
         return (
-            <Card className="mb-3 animated-card">
-                <Card.Header>
-                    <h4 className="m-0">Step 3: Review & Payment</h4>
-                </Card.Header>
-                <Card.Body>
-                    <h3 className="mb-4">Step 3: Review and Payment</h3>
-                    
-                    <Card className="mb-4">
-                        <Card.Header as="h5">Provisional Invoice</Card.Header>
-                        <Card.Body>
-                            <h6>Selected Vaccines:</h6>
-                            <ListGroup>
-                                {invoice?.paidVaccines.map((vaccine, index) => (
-                                    <ListGroup.Item key={index}>
-                                        {vaccine.name} - Dose {vaccine.doseNumber}
-                                        <Badge bg="success" className="ms-2">Pre-paid</Badge>
-                                    </ListGroup.Item>
-                                ))}
-                            </ListGroup>
+            <div className="mb-4">
+                <h5>Select Date</h5>
+                <FallbackWarning message={dateWarning} />
+                
+                {isLoadingDates ? (
+                    <div className="text-center py-4">
+                        <Spinner animation="border" role="status" variant="primary">
+                            <span className="visually-hidden">Loading available dates...</span>
+                        </Spinner>
+                        <p className="mt-2">Loading available dates...</p>
+                    </div>
+                ) : availableDates.length > 0 ? (
+                    renderCalendar()
+                ) : (
+                    <Alert variant="info">
+                        No available dates found. Please try again later or contact support.
+                    </Alert>
+                )}
+            </div>
+        );
+    };
+
+    const renderTimeSlotSelection = () => {
+        return (
+            <div className="time-slot-selection">
+                <h3 className="my-3">Select a Time Slot</h3>
+                {isLoadingTimeSlots ? (
+                    <div className="text-center my-5">
+                        <Spinner animation="border" role="status">
+                            <span className="visually-hidden">Loading time slots...</span>
+                        </Spinner>
+                        <p className="mt-2">Loading available time slots...</p>
+                    </div>
+                ) : timeSlotWarning ? (
+                    <FallbackWarning message={timeSlotWarning} />
+                ) : availableSlots && Object.keys(availableSlots).length > 0 ? (
+                    <Row className="time-slots-container">
+                        {isDayPriority ? (
+                            // Date-first approach: Show all time slots
+                            availableSlots['all']?.map((slot, idx) => (
+                                <Col xs={12} md={6} lg={3} key={idx}>
+                                                    <Button
+                                        variant={selectedTimeSlot === slot.id ? "primary" : "outline-primary"}
+                                        className={`time-slot-btn w-100 mb-3 ${!slot.available ? 'disabled' : ''}`}
+                                        onClick={() => handleTimeSlotSelect(slot.id)}
+                                        disabled={!slot.available}
+                                    >
+                                        <div>{slot.id}</div>
+                                        <Badge 
+                                            bg="success"
+                                            className="availability-badge"
+                                        >
+                                            {slot.availableCount}
+                                        </Badge>
+                                                    </Button>
+                                                </Col>
+                            ))
+                        ) : (
+                            // Doctor-first approach: Show time slots for the selected doctor
+                            availableSlots[selectedDoctor]?.map((slot, idx) => (
+                                <Col xs={12} md={6} lg={3} key={idx}>
+                                    <Button
+                                        variant={selectedTimeSlot === slot.id ? "primary" : "outline-primary"}
+                                        className={`time-slot-btn w-100 mb-3 ${!slot.available ? 'disabled' : ''}`}
+                                        onClick={() => handleTimeSlotSelect(slot.id)}
+                                        disabled={!slot.available}
+                                    >
+                                        <div>{slot.id}</div>
+                                        <Badge 
+                                            bg="success"
+                                            className="availability-badge"
+                                        >
+                                            {slot.availableCount}
+                                        </Badge>
+                                    </Button>
+                            </Col>
+                            ))
+                        )}
+                    </Row>
+                ) : (
+                    <Alert variant="info">
+                        No time slots available for the selected date.
+                    </Alert>
+                )}
+            </div>
+        );
+    };
+
+    const renderDoctorSelection = () => {
+        // Determine which doctor list to use based on priority mode
+        const doctorsToDisplay = isDayPriority === true 
+            ? availableDoctorsForTimeSlot 
+            : availableDoctorsForSelection;
+        
+        // Debug logging to check what doctor data we have
+        console.log('Rendering doctors in mode:', isDayPriority ? 'Date-first' : 'Doctor-first');
+        console.log('Doctors to display:', doctorsToDisplay);
+        
+        return (
+            <div className="mb-4">
+                <h5>Select Doctor</h5>
+                <FallbackWarning message={doctorWarning} />
+                
+                {isDayPriority === true && !selectedTimeSlot ? (
+                    <Alert variant="info">Please select a time slot first.</Alert>
+                ) : isLoadingDoctors ? (
+                    <div className="text-center py-4">
+                        <Spinner animation="border" role="status" variant="primary">
+                            <span className="visually-hidden">Loading doctors...</span>
+                        </Spinner>
+                        <p className="mt-2">Loading available doctors...</p>
+                    </div>
+                ) : doctorsToDisplay && doctorsToDisplay.length > 0 ? (
+                    <Row className="g-3">
+                        {doctorsToDisplay.map(doctor => {
+                            // Debug log for each doctor
+                            console.log('Rendering doctor:', doctor);
                             
-                            <h6 className="mt-3">Unpaid Vaccines:</h6>
-                            <ListGroup>
-                                {invoice?.unpaidVaccines.map((vaccine, index) => (
-                                    <ListGroup.Item key={index}>
-                                        {vaccine.name} - Dose {vaccine.doseNumber}
-                                        <span className="float-end">{formatCurrency(vaccine.price)}</span>
-                                    </ListGroup.Item>
-                                ))}
-                            </ListGroup>
+                            // Get doctor name or fallback
+                            const firstName = doctor.firstName || '';
+                            const lastName = doctor.lastName || '';
+                            const doctorName = (firstName || lastName) ? `${firstName} ${lastName}`.trim() : 'Unknown'; 
                             
-                            <div className="d-flex justify-content-between fw-bold fs-5 mt-3">
-                                <span>Total Amount:</span>
-                                <span>{formatCurrency(invoice?.totalAmount || 0)}</span>
-                            </div>
-                            
-                            {isPrePaid && (
-                                <Alert variant="success" className="mt-3">
-                                    <FontAwesomeIcon icon={faCheck} className="me-2" />
-                                    All selected vaccines have been pre-paid. No payment required.
-                                </Alert>
-                            )}
-                        </Card.Body>
-                    </Card>
-                    
-                    {!isPrePaid && (
-                        <Form.Group className="mb-4">
-                            <Form.Label>Select Payment Method</Form.Label>
-                            <Row>
-                                <Col md={6}>
-                                    <Form.Check
-                                        type="radio"
-                                        id="online-payment"
-                                        name="paymentMethod"
-                                        label="Online Payment (MoMo)"
-                                        value="ONLINE"
-                                        checked={paymentMethod === 'ONLINE'}
-                                        onChange={() => handlePaymentMethodChange('ONLINE')}
-                                        className="mb-2"
-                                    />
-                                    <small className="text-muted d-block mb-3">
+                            return (
+                            <Col xs={12} sm={6} md={4} key={doctor.id}>
+                                <Card 
+                                    onClick={() => handleDoctorSelect(doctor)}
+                                        className={`doctor-card ${selectedDoctor === doctor.id ? 'selected border-primary' : ''}`}
+                                    style={{ 
+                                        cursor: 'pointer', 
+                                        transition: 'all 0.3s ease',
+                                            transform: selectedDoctor === doctor.id ? 'translateY(-3px)' : 'none',
+                                            boxShadow: selectedDoctor === doctor.id ? '0 4px 8px rgba(0,0,0,0.1)' : '0 1px 3px rgba(0,0,0,0.05)'
+                                    }}
+                                >
+                                    <Card.Body>
+                                        <div className="d-flex align-items-center mb-2">
+                                            <FontAwesomeIcon 
+                                                icon={faUser} 
+                                                className="me-2" 
+                                                size="lg" 
+                                                    color={selectedDoctor === doctor.id ? '#007bff' : '#6c757d'} 
+                                            />
+                                                <Card.Title className="mb-0">
+                                                    Dr. {doctorName}
+                                                </Card.Title>
+                                        </div>
+                                        <Badge bg="info" className="mb-2">{doctor.specialization || 'Pediatrician'}</Badge>
+                                        <Card.Text className="mt-2 small text-muted">
+                                            {doctor.isFallback 
+                                                ? "Sample doctor data for demonstration" 
+                                                : "Available for your selected time slot"}
+                                        </Card.Text>
+                                    </Card.Body>
+                                </Card>
+                            </Col>
+                            );
+                        })}
+                    </Row>
+                ) : (
+                    <Alert variant="warning">
+                        {isDayPriority === true
+                            ? "No doctors available for the selected time slot. Please choose a different time slot or date."
+                            : "No doctors available. Please try again later."}
+                    </Alert>
+                )}
+            </div>
+        );
+    };
+    
+    // Render Step 3: Payment Selection
+    const renderStep3 = () => {
+        // Helper function to check if a vaccine is part of a combo
+        const isVaccineFromCombo = (vaccine) => {
+            return vaccine.comboId || vaccine.isFromCombo;
+        };
+
+        // Helper function to get combo details for a vaccine
+        const getComboDetails = (vaccineOrComboId) => {
+            if (!childVaccineData?.vaccineCombos) return null;
+            const combo = childVaccineData.vaccineCombos.find(combo => 
+                combo.id === vaccineOrComboId || combo.comboId === vaccineOrComboId
+            );
+            console.log(`Looking for combo details with ID ${vaccineOrComboId}, found:`, combo);
+            return combo;
+        };
+
+        // Group vaccines by combo for better display
+        const groupVaccinesByCombo = (vaccines) => {
+            const grouped = {};
+            
+            vaccines.forEach(vaccine => {
+                if (isVaccineFromCombo(vaccine)) {
+                    const comboId = vaccine.comboId;
+                    if (!grouped[comboId]) {
+                        const comboDetails = getComboDetails(comboId);
+                        // Ensure we have the combo details
+                        console.log("Found combo details for ID " + comboId + ":", comboDetails);
+                        grouped[comboId] = {
+                            comboDetails,
+                            vaccines: []
+                        };
+                    }
+                    grouped[comboId].vaccines.push(vaccine);
+                }
+            });
+            
+            // Add a more detailed console log to see exactly what we have
+            Object.entries(grouped).forEach(([comboId, data]) => {
+                console.log(`Grouped combo ${comboId} details:`, data.comboDetails);
+                console.log(`Grouped combo ${comboId} vaccines:`, data.vaccines);
+            });
+            
+            return grouped;
+        };
+
+        // Group unpaid vaccines by combo
+        const unpaidCombos = groupVaccinesByCombo(invoice?.unpaidVaccines || []);
+        console.log("Unpaid combos:", unpaidCombos);
+        
+        // Regular vaccines (not part of a combo)
+        const regularUnpaidVaccines = (invoice?.unpaidVaccines || [])
+            .filter(vaccine => !isVaccineFromCombo(vaccine));
+
+        return (
+            <div>
+                <h3 className="mb-4">Step 3: Review and Payment</h3>
+                
+                <Card className="mb-4 shadow-sm">
+                    <Card.Header className="bg-primary text-white">
+                        <h5 className="mb-0">Provisional Invoice</h5>
+                    </Card.Header>
+                    <Card.Body>
+                        {invoice?.paidVaccines && invoice.paidVaccines.length > 0 && (
+                            <>
+                                <h6 className="border-bottom pb-2 mb-3">
+                                    <Badge bg="success" className="me-2">
+                                        <FontAwesomeIcon icon={faCheckCircle} className="me-1" />
+                                        Pre-paid
+                                    </Badge> 
+                                    Vaccines
+                                </h6>
+                                <ListGroup className="mb-4" variant="flush">
+                                    {invoice.paidVaccines.map((vaccine, index) => (
+                                        <ListGroup.Item key={index} className="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <strong>{vaccine.name}</strong>
+                                                <small className="d-block text-muted">Dose {vaccine.doseNumber}</small>
+                                            </div>
+                                            <Badge bg="success" pill>Pre-paid</Badge>
+                                </ListGroup.Item>
+                            ))}
+                        </ListGroup>
+                            </>
+                        )}
+                        
+                        <h6 className="border-bottom pb-2 mb-3">Vaccines to Pay</h6>
+                        
+                        {/* Display regular vaccines (not part of a combo) */}
+                        {regularUnpaidVaccines.length > 0 && (
+                            <ListGroup className="mb-3" variant="flush">
+                                {regularUnpaidVaccines.map((vaccine, index) => (
+                                    <ListGroup.Item key={`regular-${index}`} className="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>{vaccine.name}</strong>
+                                            <small className="d-block text-muted">Dose {vaccine.doseNumber}</small>
+                                        </div>
+                                        <span className="fw-bold">{formatCurrency(vaccine.price)}</span>
+                                </ListGroup.Item>
+                            ))}
+                        </ListGroup>
+                        )}
+                        
+                        {/* Display combo vaccines with detailed breakdown */}
+                        {Object.keys(unpaidCombos).length > 0 && (
+                            <>
+                                {Object.entries(unpaidCombos).map(([comboId, comboData], idx) => {
+                                    // Get combo details
+                                    const comboDetails = comboData.comboDetails;
+                                    console.log(`Rendering combo ${comboId}:`, comboDetails);
+                                    
+                                    // Get vaccines - first try from combo details, then from combo data
+                                    let comboVaccines = [];
+                                    if (comboDetails?.vaccines && comboDetails.vaccines.length > 0) {
+                                        comboVaccines = comboDetails.vaccines;
+                                        console.log("Using vaccines from combo details:", comboVaccines);
+                                    } else if (childVaccineData?.vaccineCombos) {
+                                        // Try to find the combo in the original data
+                                        const originalCombo = childVaccineData.vaccineCombos.find(c => 
+                                            c.comboId == comboId || c.id == comboId
+                                        );
+                                        if (originalCombo?.vaccines) {
+                                            comboVaccines = originalCombo.vaccines;
+                                            console.log("Using vaccines from original combo data:", comboVaccines);
+                                        }
+                                    }
+                                    
+                                    return (
+                                        <Card key={`combo-${comboId}-${idx}`} className="mb-3 border-primary">
+                                            <Card.Header className="bg-light">
+                                                <div className="d-flex justify-content-between align-items-center">
+                                                    <h6 className="mb-0">
+                                                        <Badge bg="primary" className="me-2">Combo</Badge>
+                                                        {comboDetails?.comboName || comboDetails?.name || "Vaccine Combo"}
+                                                    </h6>
+                                                    {/* Removed combo price display as requested */}
+                                                </div>
+                                            </Card.Header>
+                                            <ListGroup variant="flush">
+                                                {comboVaccines.length > 0 ? (
+                                                    comboVaccines.map((vaccine, vIdx) => {
+                                                        // Calculate total price for this vaccine (totalDose × vaccinePrice)
+                                                        const doseCount = vaccine.totalDose || vaccine.doseNumber || 1;
+                                                        const vaccinePrice = vaccine.price || 0;
+                                                        const totalVaccinePrice = doseCount * vaccinePrice;
+                                                        
+                                                        return (
+                                                            <ListGroup.Item key={`combo-${comboId}-vaccine-${vIdx}`} className="py-2 d-flex justify-content-between align-items-start">
+                                                                <div>
+                                                                    <div className="fw-bold">{vaccine.vaccineName || vaccine.name}</div>
+                                                                    <div className="text-muted">
+                                                                        {doseCount} dose(s)
+                                                                    </div>
+                                                                </div>
+                                                                <div className="text-end">
+                                                                    {formatCurrency(totalVaccinePrice)}
+                                                                </div>
+                                                            </ListGroup.Item>
+                                                        );
+                                                    })
+                                                ) : (
+                                                    <ListGroup.Item className="text-muted py-2">
+                                                        No vaccine details available for this combo
+                                                    </ListGroup.Item>
+                                                )}
+                                            </ListGroup>
+                                            <Card.Footer className="bg-light">
+                                                <div className="d-flex justify-content-end align-items-center">
+                                                    <div className="text-end">
+                                                        <div className="fw-bold">
+                                                            Original price: {formatCurrency(comboDetails?.price || 
+                                                                // Calculate the sum of vaccines if combo price is not available
+                                                                (comboVaccines.reduce((sum, v) => sum + ((v.totalDose || v.doseNumber || 1) * (v.price || 0)), 0))
+                                                            )}
+                                                        </div>
+                                                        {comboDetails?.saleOff > 0 && (
+                                                            <div className="text-success small mt-1">
+                                                                <FontAwesomeIcon icon={faTag} className="me-1" />
+                                                                Sale off: {comboDetails.saleOff}%
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </Card.Footer>
+                                        </Card>
+                                    );
+                                })}
+                            </>
+                        )}
+                        
+                        <div className="d-flex justify-content-between fw-bold fs-5 mt-4 pt-3 border-top">
+                            <span>Total Amount:</span>
+                            <span className="text-success">{formatCurrency(invoice?.totalAmount || 0)}</span>
+                        </div>
+                        
+                        {isPrePaid && (
+                            <Alert variant="success" className="mt-3">
+                                <FontAwesomeIcon icon={faCheck} className="me-2" />
+                                <strong>Pre-paid Appointment:</strong> All selected vaccines have been pre-paid. Your appointment will be created with PAID status and no additional payment is required.
+                            </Alert>
+                        )}
+                        
+                        {!isPrePaid && (
+                            <Form.Group className="mb-4">
+                                <Form.Label>Select Payment Method</Form.Label>
+                                <Row>
+                                    <Col md={6}>
+                                        <Card 
+                                            className={`mb-3 ${paymentMethod === 'ONLINE' ? 'border-primary' : ''}`}
+                                            onClick={() => handlePaymentMethodChange('ONLINE')}
+                                            style={{ cursor: 'pointer' }}
+                                        >
+                                            <Card.Body>
+                                        <Form.Check
+                                            type="radio"
+                                            id="online-payment"
+                                            name="paymentMethod"
+                                                    label={<span className="fw-bold">Online Payment (MoMo)</span>}
+                                            value="ONLINE"
+                                            checked={paymentMethod === 'ONLINE'}
+                                            onChange={() => handlePaymentMethodChange('ONLINE')}
+                                            className="mb-2"
+                                        />
+                                            <small className="text-muted d-block">
                                         Pay now using MoMo e-wallet. You'll be redirected to complete the payment.
                                     </small>
-                                </Col>
-                                <Col md={6}>
-                                    <Form.Check
-                                        type="radio"
-                                        id="offline-payment"
-                                        name="paymentMethod"
-                                        label="Offline Payment (Cash)"
-                                        value="OFFLINE"
-                                        checked={paymentMethod === 'OFFLINE'}
-                                        onChange={() => handlePaymentMethodChange('OFFLINE')}
-                                        className="mb-2"
-                                    />
-                                    <small className="text-muted d-block mb-3">
+                                            </Card.Body>
+                                        </Card>
+                                    </Col>
+                                    <Col md={6}>
+                                        <Card 
+                                            className={`mb-3 ${paymentMethod === 'OFFLINE' ? 'border-primary' : ''}`}
+                                            onClick={() => handlePaymentMethodChange('OFFLINE')}
+                                            style={{ cursor: 'pointer' }}
+                                        >
+                                            <Card.Body>
+                                        <Form.Check
+                                            type="radio"
+                                            id="offline-payment"
+                                            name="paymentMethod"
+                                                    label={<span className="fw-bold">Offline Payment (Cash)</span>}
+                                            value="OFFLINE"
+                                            checked={paymentMethod === 'OFFLINE'}
+                                            onChange={() => handlePaymentMethodChange('OFFLINE')}
+                                            className="mb-2"
+                                        />
+                                            <small className="text-muted d-block">
                                         Pay later at the clinic during your appointment.
                                     </small>
-                                </Col>
-                            </Row>
-                        </Form.Group>
-                    )}
-                    
-                    <div className="mb-3">
-                        <h6>Appointment Details:</h6>
-                        <p><strong>Date:</strong> {formatDate(selectedDate)}</p>
-                        <p><strong>Time:</strong> {
-                            selectedTimeSlot ? 
-                                (() => {
-                                    // Try to format the time slot ID (which is usually like "8-9" or "9-10")
-                                    const timeSlotParts = selectedTimeSlot.toString().split('-');
-                                    if (timeSlotParts.length === 2) {
-                                        const start = timeSlotParts[0].padStart(2, '0') + ':00';
-                                        const end = timeSlotParts[1].padStart(2, '0') + ':00';
-                                        return `${start} - ${end}`;
-                                    }
-                                    // If we can't format it, just show the ID
-                                    return selectedTimeSlot;
-                                })()
-                                : 'Not selected'
-                        }</p>
-                        <p><strong>Doctor:</strong> {
-                            selectedDoctor ? 
-                                (() => {
-                                    // Look for the doctor in the appropriate list
-                                    const doctorsList = isDayPriority ? availableDoctorsForTimeSlot : availableDoctorsForSelection;
-                                    const doctor = doctorsList.find(d => d.id === selectedDoctor);
-                                    
-                                    // Format the doctor name
-                                    const firstName = doctor?.firstName || '';
-                                    const lastName = doctor?.lastName || '';
-                                    const doctorName = (firstName || lastName) ? `${firstName} ${lastName}`.trim() : 'Unknown';
-                                    
-                                    return `Dr. ${doctorName}`;
-                                })()
-                                : 'Any available doctor'
-                        }</p>
-                        {notes && <p><strong>Notes:</strong> {notes}</p>}
-                    </div>
-                </Card.Body>
-            </Card>
+                                            </Card.Body>
+                                        </Card>
+                                    </Col>
+                                </Row>
+                            </Form.Group>
+                        )}
+                    </Card.Body>
+                </Card>
+                
+                <Card className="mb-3 shadow-sm">
+                    <Card.Header className="bg-light">
+                        <h6 className="mb-0">Appointment Details</h6>
+                    </Card.Header>
+                    <Card.Body>
+                        <Row>
+                            <Col md={6}>
+                    <p><strong>Date:</strong> {formatDate(selectedDate)}</p>
+                    <p><strong>Time:</strong> {
+                        selectedTimeSlot ? 
+                            (() => {
+                                // Try to format the time slot ID (which is usually like "8-9" or "9-10")
+                                const timeSlotParts = selectedTimeSlot.toString().split('-');
+                                if (timeSlotParts.length === 2) {
+                                    const start = timeSlotParts[0].padStart(2, '0') + ':00';
+                                    const end = timeSlotParts[1].padStart(2, '0') + ':00';
+                                    return `${start} - ${end}`;
+                                }
+                                // If we can't format it, just show the ID
+                                return selectedTimeSlot;
+                            })()
+                            : 'Not selected'
+                    }</p>
+                            </Col>
+                            <Col md={6}>
+                    <p><strong>Doctor:</strong> {
+                        selectedDoctor ? 
+                            (() => {
+                                // Look for the doctor in the appropriate list
+                                const doctorsList = isDayPriority ? availableDoctorsForTimeSlot : availableDoctorsForSelection;
+                                const doctor = doctorsList.find(d => d.id === selectedDoctor);
+                                
+                                // Format the doctor name
+                                const firstName = doctor?.firstName || '';
+                                const lastName = doctor?.lastName || '';
+                                const doctorName = (firstName || lastName) ? `${firstName} ${lastName}`.trim() : 'Unknown';
+                                
+                                return `Dr. ${doctorName}`;
+                            })()
+                            : 'Any available doctor'
+                    }</p>
+                    {notes && <p><strong>Notes:</strong> {notes}</p>}
+                            </Col>
+                        </Row>
+                    </Card.Body>
+                </Card>
+            </div>
         );
+    };
+    
+    // Add a helper function to format currency in VND
+    const formatCurrency = (amount) => {
+        // Format as Vietnamese Dong (VND)
+        return new Intl.NumberFormat('vi-VN', {
+            style: 'currency',
+            currency: 'VND',
+            maximumFractionDigits: 0, // VND doesn't use decimal places
+        }).format(amount);
     };
     
     // Render Step 4: Confirmation
@@ -1461,7 +1843,7 @@ const AppointmentCreation = () => {
         // Check if we have appointment data
         if (!appointmentData && !appointmentId && !createdAppointmentId) {
             return (
-                <Alert variant="danger" className="animated-card">
+                <Alert variant="danger">
                     <FontAwesomeIcon icon={faExclamationTriangle} /> No appointment data found.
                 </Alert>
             );
@@ -1475,18 +1857,38 @@ const AppointmentCreation = () => {
             timeSlot: selectedTimeSlot,
             status: isPaid ? 'PAID' : 'PENDING',
             isPaid: isPaid,
-            totalAmount: invoice?.totalAmount || 0
+            totalAmount: invoice?.totalAmount || 0,
+            paymentMethod: paymentMethod // Include current payment method
         };
         
         // Get payment status from appointmentData
-        const isPaidStatus = displayData?.isPaid || displayData?.status === 'PAID' || isPaid;
+        const isPaidStatus = displayData?.isPaid || displayData?.status === 'PAID' || isPaid || isPrePaid;
         
-        // Get payment method safely
-        const paymentMethodDisplay = (displayData?.paymentMethod || paymentMethod || "ONLINE").toUpperCase();
+        // FORCE the payment method to be ONLINE when paid
+        // This ensures we don't show OFFLINE for completed online payments
+        let forcedPaymentMethod;
+        
+        if (isPaidStatus && paymentStatus === 'SUCCESS') {
+            // If payment is successful, ALWAYS show as ONLINE
+            forcedPaymentMethod = 'ONLINE';
+            console.log('Forcing payment method to ONLINE for paid status');
+        } else if (isPaidStatus && displayData.paymentStatus === 'COMPLETED') {
+            // If payment status is COMPLETED, also show as ONLINE
+            forcedPaymentMethod = 'ONLINE';
+            console.log('Forcing payment method to ONLINE for completed payment');
+        } else {
+            // Use the original logic for non-paid appointments
+            forcedPaymentMethod = (displayData?.paymentMethod || paymentMethod || "ONLINE");
+            console.log('Using standard payment method logic:', forcedPaymentMethod);
+        }
+        
+        const paymentMethodDisplay = forcedPaymentMethod.toUpperCase();
+        console.log("Payment method display:", paymentMethodDisplay);
+        console.log("Payment status:", isPaidStatus ? "PAID" : "UNPAID");
         
         // Helper function to display payment status text
         const getPaymentStatusText = () => {
-            if (isPaidStatus) {
+            if (isPaidStatus || isPrePaid) {
                 return "COMPLETED";
             } else if (paymentStatus === 'SUCCESS') {
                 return "COMPLETED"; // Show as completed if payment was successful even if backend hasn't caught up
@@ -1499,7 +1901,7 @@ const AppointmentCreation = () => {
         
         // Helper function to get payment status badge
         const getPaymentStatusBadge = () => {
-            if (isPaidStatus || paymentStatus === 'SUCCESS') {
+            if (isPaidStatus || paymentStatus === 'SUCCESS' || isPrePaid) {
                 return <Badge bg="success">COMPLETED</Badge>;
             } else if (displayData?.status === 'PENDING') {
                 return <Badge bg="warning">PENDING</Badge>;
@@ -1509,14 +1911,14 @@ const AppointmentCreation = () => {
         };
         
         return (
-            <Card className="mb-3 animated-card">
+                <Card className="mb-3">
                 <Card.Header>
                     <h4 className="m-0">
-                        {isPaidStatus || paymentStatus === 'SUCCESS' ? (
+                        {isPaidStatus || paymentStatus === 'SUCCESS' || isPrePaid ? (
                             <div className="text-center mb-4">
                                 <div className="success-icon">
                                     <FontAwesomeIcon icon={faCheckCircle} size="3x" className="text-success" />
-                                </div>
+                                        </div>
                                 <h2>Appointment Confirmed!</h2>
                                 <p>Your appointment has been successfully scheduled.</p>
                             </div>
@@ -1546,41 +1948,53 @@ const AppointmentCreation = () => {
                             </div>
                         </div>
                         
-                        <div className="mb-3">
-                            <h5>Payment Details</h5>
-                            <div className="detail-item">
-                                <strong>Payment Method:</strong> {paymentMethodDisplay}
-                            </div>
-                            <div className="detail-item">
-                                <strong>Payment Status:</strong> {getPaymentStatusBadge()}
-                            </div>
-                            <div className="detail-item">
-                                <strong>Total Amount:</strong> {formatCurrency(displayData.totalAmount)}
-                            </div>
-                            <div className="detail-item">
-                                <strong>Transaction ID:</strong> {displayData.transactionId || "N/A"}
-                            </div>
-                            <div className="detail-item">
-                                <strong>Payment Date:</strong> {displayData.paymentDate ? formatDate(displayData.paymentDate) : "N/A"}
-                            </div>
-                            {paymentMethodDisplay === 'OFFLINE' && !isPaidStatus && (
-                                <div className="alert alert-info mt-2 small">
-                                    <FontAwesomeIcon icon={faInfoCircle} className="me-2" />
-                                    Please make your payment at the clinic during your appointment.
+                        {/* Only show payment details if the appointment is not pre-paid */}
+                        {!isPrePaid && (
+                            <div className="mb-3">
+                                <h5>Payment Details</h5>
+                                <div className="detail-item">
+                                    <strong>Payment Method:</strong> {isPaidStatus ? 'ONLINE' : paymentMethodDisplay}
                                 </div>
-                            )}
-                            {paymentMethodDisplay === 'ONLINE' && isPaidStatus && (
-                                <div className="alert alert-success mt-2 small">
-                                    <FontAwesomeIcon icon={faCheckCircle} className="me-2" />
-                                    Your payment has been successfully processed.
+                                <div className="detail-item">
+                                    <strong>Payment Status:</strong> {getPaymentStatusBadge()}
                                 </div>
-                            )}
-                        </div>
+                                <div className="detail-item">
+                                    <strong>Total Amount:</strong> {formatCurrency(displayData.totalAmount)}
+                                </div>
+                                <div className="detail-item">
+                                    <strong>Transaction ID:</strong> {displayData.transactionId || "N/A"}
+                                </div>
+                                <div className="detail-item">
+                                    <strong>Payment Date:</strong> {displayData.paymentDate ? formatDate(displayData.paymentDate) : "N/A"}
+                                </div>
+                                {paymentMethodDisplay === 'OFFLINE' && !isPaidStatus && (
+                                    <div className="alert alert-info mt-2 small">
+                                        <FontAwesomeIcon icon={faInfoCircle} className="me-2" />
+                                        Please make your payment at the clinic during your appointment.
+                                </div>
+                                )}
+                                {/* Show payment success message if payment is completed, regardless of method display */}
+                                {isPaidStatus && (
+                                    <div className="alert alert-success mt-2 small">
+                                        <FontAwesomeIcon icon={faCheckCircle} className="me-2" />
+                                        Your payment has been successfully processed.
+                                </div>
+                                )}
+                            </div>
+                        )}
+                        
+                        {/* Show pre-paid confirmation message if all vaccines are pre-paid */}
+                        {isPrePaid && (
+                            <div className="alert alert-success mt-3">
+                                <FontAwesomeIcon icon={faCheckCircle} className="me-2" />
+                                <strong>Pre-paid Appointment:</strong> All selected vaccines have been pre-paid. No additional payment is required.
+                            </div>
+                        )}
                     </div>
                     
                     {/* Removed duplicate buttons - they are handled by renderNavButtons */}
-                </Card.Body>
-            </Card>
+                    </Card.Body>
+                </Card>
         );
     };
     
@@ -1610,9 +2024,13 @@ const AppointmentCreation = () => {
                                 Processing...
                             </>
                         ) : currentStep === 3 ? (
-                            paymentMethod === 'ONLINE' 
-                                ? 'Create Appointment & Pay Online' 
-                                : 'Create Appointment & Pay Later'
+                            isPrePaid ? (
+                                'Create Appointment'
+                            ) : paymentMethod === 'ONLINE' ? (
+                                'Create Appointment & Pay Online' 
+                            ) : (
+                                'Create Appointment & Pay Later'
+                            )
                         ) : (
                             'Next'
                         )}
@@ -2175,6 +2593,36 @@ const AppointmentCreation = () => {
                                                     {vaccine.description || 'Combination of vaccines'}
                                                 </small>
                                             </div>
+                                            
+                                            {/* Display individual vaccines in the combo */}
+                                            {vaccine.vaccines && vaccine.vaccines.length > 0 && (
+                                                <div className="mt-2 mb-3">
+                                                    <h6 className="mb-2 small fw-bold">Included Vaccines:</h6>
+                                                    <ListGroup variant="flush" className="small">
+                                                        {vaccine.vaccines.map((comboVaccine, idx) => (
+                                                            <ListGroup.Item key={`combo-vaccine-${idx}`} 
+                                                                className="py-1 px-0 border-0 border-bottom"
+                                                                style={{ backgroundColor: 'transparent' }}
+                                                            >
+                                                                <div className="d-flex justify-content-between align-items-center">
+                                                                    <div>
+                                                                        <span className="text-primary">{comboVaccine.vaccineName || comboVaccine.name}</span>
+                                                                        <small className="text-muted d-block">
+                                                                            {comboVaccine.totalDose || 1} dose(s)
+                                                                        </small>
+                                                                    </div>
+                                                                    {comboVaccine.price && (
+                                                                        <Badge bg="secondary" pill className="text-white">
+                                                                            {formatCurrency(comboVaccine.price)}
+                                                                        </Badge>
+                                                                    )}
+                                                                </div>
+                        </ListGroup.Item>
+                                                        ))}
+                                                    </ListGroup>
+                                                </div>
+                                            )}
+                                            
                                             <div className="mt-2">
                                                 <strong>Price: </strong>{formatCurrency(vaccine.price || 0)}
                         </div>
@@ -2332,37 +2780,53 @@ const AppointmentCreation = () => {
             return (
                 <Col md={6} key={`combo-${combo.id || combo.comboId || index}-${index}`} className="mb-3">
                 <Card 
-                        className={`h-100 ${isSelected ? 'border-primary' : ''}`}
+                        className={`h-100 ${isSelected ? 'border-primary shadow' : ''}`}
                         onClick={() => handleVaccineSelection(combo, !isSelected)}
                         style={{ 
                             cursor: 'pointer',
-                            transition: 'all 0.2s ease',
-                            borderWidth: isSelected ? '2px' : '1px'
+                            transition: 'all 0.3s ease',
+                            borderWidth: isSelected ? '2px' : '1px',
+                            transform: isSelected ? 'translateY(-5px)' : 'none',
+                            backgroundColor: isSelected ? '#f8f9ff' : 'white'
                         }}
                 >
-                    <Card.Body>
-                        <div className="d-flex justify-content-between align-items-center mb-2">
+                    <Card.Header className="bg-gradient" style={{ 
+                        background: isSelected ? 'linear-gradient(to right, #4e73df, #36b9cc)' : 'linear-gradient(to right, #f8f9fa, #e9ecef)',
+                        color: isSelected ? 'white' : 'inherit'
+                    }}>
+                        <div className="d-flex justify-content-between align-items-center">
                                 <h5 className="mb-0">{combo.comboName || combo.name}</h5>
-                            <Badge bg="info">Combo</Badge>
+                            <Badge bg={isSelected ? "light" : "primary"} text={isSelected ? "primary" : "white"} pill>Combo Pack</Badge>
                         </div>
-                        
+                    </Card.Header>
+                    <Card.Body>
                         <Card.Text className="text-muted small mb-3">{combo.description}</Card.Text>
                         
                         {hasVaccines ? (
                             <>
-                                <h6 className="mb-2">Included Vaccines:</h6>
+                                <h6 className="mb-2 border-bottom pb-2">Included Vaccines:</h6>
                         <ListGroup variant="flush" className="mb-3">
                             {combo.vaccines.map((vaccine, vIndex) => (
-                                        <ListGroup.Item key={`${combo.id}-vaccine-${vIndex}`} className="py-2">
+                                        <ListGroup.Item key={`${combo.id}-vaccine-${vIndex}`} 
+                                            className="py-2 px-0 border-0 border-bottom"
+                                            style={{
+                                                backgroundColor: 'transparent'
+                                            }}
+                                        >
                                             <div className="d-flex justify-content-between align-items-center">
                                                 <div>
-                                                    <strong>{vaccine.vaccineName || vaccine.name}</strong>
+                                                    <strong className="text-primary">{vaccine.vaccineName || vaccine.name}</strong>
                                     <small className="text-muted d-block">
                                                         {vaccine.totalDose || vaccine.doseNumber || 1} dose{(vaccine.totalDose || vaccine.doseNumber || 1) > 1 ? 's' : ''}
                                     </small>
+                                                    {vaccine.manufacturer && (
+                                                        <small className="text-muted d-block">
+                                                            Manufacturer: {vaccine.manufacturer}
+                                                        </small>
+                                                    )}
                                                 </div>
                                                 {vaccine.price && (
-                                                    <Badge bg="secondary">${vaccine.price}</Badge>
+                                                    <Badge bg="info" pill>{formatCurrency(vaccine.price)}</Badge>
                                                 )}
                                             </div>
                                 </ListGroup.Item>
@@ -2375,17 +2839,27 @@ const AppointmentCreation = () => {
                             </Card.Text>
                         )}
                         
-                        <div className="d-flex justify-content-between align-items-center mt-2">
+                        <div className="d-flex justify-content-between align-items-center mt-3 border-top pt-3">
                             <strong>Total Price:</strong>
-                            <h5 className="mb-0 text-primary">${combo.price}</h5>
+                            <h5 className="mb-0 text-success">{formatCurrency(combo.price)}</h5>
                         </div>
                         
                         {combo.saleOff > 0 && (
-                            <div className="mt-1">
-                                <Badge bg="success">Save {combo.saleOff}%</Badge>
+                            <div className="mt-1 text-end">
+                                <Badge bg="success" pill>Save {combo.saleOff}%</Badge>
+                                {combo.originalPrice && (
+                                    <small className="text-muted ms-2 text-decoration-line-through">
+                                        {formatCurrency(combo.originalPrice)}
+                                    </small>
+                                )}
                             </div>
                         )}
                     </Card.Body>
+                    {isSelected && (
+                        <Card.Footer className="bg-primary text-white text-center">
+                            <small><i className="fas fa-check me-1"></i> Selected for Appointment</small>
+                        </Card.Footer>
+                    )}
                 </Card>
             </Col>
             );
@@ -2647,12 +3121,38 @@ const AppointmentCreation = () => {
                 if (data.isPaid || data.status === 'PAID') {
                     setIsPaid(true);
                     setPaymentStatus('SUCCESS');
+                    
+                    // Force paymentMethod to ONLINE for successful payments
+                    if (data.paymentMethod === null || data.paymentMethod === 'OFFLINE') {
+                        console.log('Forcing payment method to ONLINE for successful payment');
+                        setAppointmentData(prevData => ({
+                            ...prevData,
+                            paymentMethod: 'ONLINE'
+                        }));
+                    }
                 }
                 
-                // Log payment status
+                // Log payment status and method
                 const paymentStatus = data.status || 'UNKNOWN';
                 console.log('Payment Status:', paymentStatus);
+                console.log('Payment Method:', data.paymentMethod);
                 console.log('Appointment Vaccines:', data.appointmentVaccines);
+                
+                // If payment is complete but payment method is still showing as OFFLINE
+                // explicitly update it to ONLINE if we're coming from an online payment flow
+                if ((data.isPaid || data.status === 'PAID') && 
+                    paymentStatus === 'SUCCESS' && 
+                    data.paymentMethod === 'OFFLINE' && 
+                    paymentMethod === 'ONLINE') {
+                    
+                    console.log('Correcting payment method display from OFFLINE to ONLINE');
+                    
+                    // Update the data object with the correct payment method
+                    setAppointmentData(prevData => ({
+                        ...prevData,
+                        paymentMethod: 'ONLINE'
+                    }));
+                }
                 
                 // Check if payment status is still PENDING despite successful payment
                 // This could indicate the backend didn't properly update the payment record
@@ -2713,11 +3213,13 @@ const AppointmentCreation = () => {
                 if (retryCount > 0) {
                     setIsPaid(true);
                     
-                    // Update local state to reflect paid status
+                    // Update local state to reflect paid status and correct payment method
                     setAppointmentData(prevData => ({
                         ...prevData,
                         isPaid: true,
-                        status: 'PAID'
+                        status: 'PAID',
+                        // Always force payment method to ONLINE for paid appointments after retry
+                        paymentMethod: 'ONLINE'
                     }));
                 }
             })
@@ -2739,6 +3241,7 @@ const AppointmentCreation = () => {
                         id: appointmentId,
                         status: 'PAID',
                         isPaid: true,
+                        paymentMethod: 'ONLINE', // Always set to ONLINE for fallback
                         childName: 'Your child', // Fallback name
                         appointmentTime: new Date().toISOString(),
                         totalAmount: invoice?.totalAmount || 0,
@@ -2779,20 +3282,7 @@ const AppointmentCreation = () => {
     const [showDoctorSelection, setShowDoctorSelection] = useState(false);
     const [paymentCanceled, setPaymentCanceled] = useState(false);
     const [prevPaymentMethod, setPrevPaymentMethod] = useState(null);
-    const scrollPositionRef = useRef(0);
-    
-    // Function to save current scroll position
-    const saveScrollPosition = () => {
-        scrollPositionRef.current = window.scrollY;
-    };
-    
-    // Function to restore scroll position
-    const restoreScrollPosition = () => {
-        setTimeout(() => {
-            window.scrollTo(0, scrollPositionRef.current);
-        }, 100);
-    };
-    
+
     // Function to handle payment method change
     const handlePaymentMethodChange = async (newMethod) => {
         if (newMethod === paymentMethod) return; // No change

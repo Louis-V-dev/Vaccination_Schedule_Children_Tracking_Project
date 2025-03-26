@@ -126,7 +126,7 @@ const MomoPayment = ({ amount, orderInfo, extraData, onSuccess, onFailure, show,
             <Modal.Header closeButton>
                 <Modal.Title>
                     <FontAwesomeIcon icon={faQrcode} className="text-primary me-2" />
-                    MoMo Payment
+                    CHILD VACCINATION SCHEDULE 
                 </Modal.Title>
             </Modal.Header>
             <Modal.Body>
