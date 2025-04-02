@@ -35,15 +35,19 @@ function LoginPage() {
 
 	// Check if user is already logged in and check for success message from registration
 	useEffect(() => {
-		if (authService.isAuthenticated()) {
-			navigate('/');
+		// Check for registrationSuccess in URL parameters
+		const queryParams = new URLSearchParams(location.search);
+		const registrationSuccess = queryParams.get('registrationSuccess');
+		
+		if (registrationSuccess === 'true') {
+			setSuccessMessage("Registration successful! Please login with your credentials.");
+			// Clear the parameter to prevent showing the message again on refresh
+			navigate('/login', { replace: true });
 		}
 		
-		// Check if we have a success message from registration/verification
-		if (location.state?.verificationSuccess) {
-			setSuccessMessage(location.state.message || "Registration successful! Please login with your credentials.");
-			// Clear the state to prevent showing the message again on refresh
-			window.history.replaceState({}, document.title);
+		// Only redirect if we're not coming from registration
+		if (authService.isAuthenticated() && !registrationSuccess) {
+			navigate('/');
 		}
 	}, [navigate, location]);
 

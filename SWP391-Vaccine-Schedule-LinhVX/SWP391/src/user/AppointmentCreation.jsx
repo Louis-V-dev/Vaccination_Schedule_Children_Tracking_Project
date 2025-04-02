@@ -1721,60 +1721,60 @@ const AppointmentCreation = () => {
                                 <strong>Pre-paid Appointment:</strong> All selected vaccines have been pre-paid. Your appointment will be created with PAID status and no additional payment is required.
                             </Alert>
                         )}
-                        
-                        {!isPrePaid && (
-                            <Form.Group className="mb-4">
-                                <Form.Label>Select Payment Method</Form.Label>
-                                <Row>
-                                    <Col md={6}>
+                
+                {!isPrePaid && (
+                    <Form.Group className="mb-4">
+                        <Form.Label>Select Payment Method</Form.Label>
+                        <Row>
+                            <Col md={6}>
                                         <Card 
                                             className={`mb-3 ${paymentMethod === 'ONLINE' ? 'border-primary' : ''}`}
                                             onClick={() => handlePaymentMethodChange('ONLINE')}
                                             style={{ cursor: 'pointer' }}
                                         >
                                             <Card.Body>
-                                        <Form.Check
-                                            type="radio"
-                                            id="online-payment"
-                                            name="paymentMethod"
+                                <Form.Check
+                                    type="radio"
+                                    id="online-payment"
+                                    name="paymentMethod"
                                                     label={<span className="fw-bold">Online Payment (MoMo)</span>}
-                                            value="ONLINE"
-                                            checked={paymentMethod === 'ONLINE'}
-                                            onChange={() => handlePaymentMethodChange('ONLINE')}
-                                            className="mb-2"
-                                        />
+                                    value="ONLINE"
+                                    checked={paymentMethod === 'ONLINE'}
+                                    onChange={() => handlePaymentMethodChange('ONLINE')}
+                                    className="mb-2"
+                                />
                                             <small className="text-muted d-block">
-                                        Pay now using MoMo e-wallet. You'll be redirected to complete the payment.
-                                    </small>
+                                    Pay now using MoMo e-wallet. You'll be redirected to complete the payment.
+                                </small>
                                             </Card.Body>
                                         </Card>
-                                    </Col>
-                                    <Col md={6}>
+                            </Col>
+                            <Col md={6}>
                                         <Card 
                                             className={`mb-3 ${paymentMethod === 'OFFLINE' ? 'border-primary' : ''}`}
                                             onClick={() => handlePaymentMethodChange('OFFLINE')}
                                             style={{ cursor: 'pointer' }}
                                         >
                                             <Card.Body>
-                                        <Form.Check
-                                            type="radio"
-                                            id="offline-payment"
-                                            name="paymentMethod"
+                                <Form.Check
+                                    type="radio"
+                                    id="offline-payment"
+                                    name="paymentMethod"
                                                     label={<span className="fw-bold">Offline Payment (Cash)</span>}
-                                            value="OFFLINE"
-                                            checked={paymentMethod === 'OFFLINE'}
-                                            onChange={() => handlePaymentMethodChange('OFFLINE')}
-                                            className="mb-2"
-                                        />
+                                    value="OFFLINE"
+                                    checked={paymentMethod === 'OFFLINE'}
+                                    onChange={() => handlePaymentMethodChange('OFFLINE')}
+                                    className="mb-2"
+                                />
                                             <small className="text-muted d-block">
-                                        Pay later at the clinic during your appointment.
-                                    </small>
+                                    Pay later at the clinic during your appointment.
+                                </small>
                                             </Card.Body>
                                         </Card>
-                                    </Col>
-                                </Row>
-                            </Form.Group>
-                        )}
+                            </Col>
+                        </Row>
+                    </Form.Group>
+                )}
                     </Card.Body>
                 </Card>
                 
@@ -1950,23 +1950,23 @@ const AppointmentCreation = () => {
                         
                         {/* Only show payment details if the appointment is not pre-paid */}
                         {!isPrePaid && (
-                            <div className="mb-3">
-                                <h5>Payment Details</h5>
-                                <div className="detail-item">
+                        <div className="mb-3">
+                            <h5>Payment Details</h5>
+                            <div className="detail-item">
                                     <strong>Payment Method:</strong> {isPaidStatus ? 'ONLINE' : paymentMethodDisplay}
-                                </div>
-                                <div className="detail-item">
-                                    <strong>Payment Status:</strong> {getPaymentStatusBadge()}
-                                </div>
-                                <div className="detail-item">
-                                    <strong>Total Amount:</strong> {formatCurrency(displayData.totalAmount)}
-                                </div>
+                            </div>
+                            <div className="detail-item">
+                                <strong>Payment Status:</strong> {getPaymentStatusBadge()}
+                            </div>
+                            <div className="detail-item">
+                                <strong>Total Amount:</strong> {formatCurrency(displayData.totalAmount)}
+                            </div>
                                 <div className="detail-item">
                                     <strong>Transaction ID:</strong> {displayData.transactionId || "N/A"}
-                                </div>
+                        </div>
                                 <div className="detail-item">
                                     <strong>Payment Date:</strong> {displayData.paymentDate ? formatDate(displayData.paymentDate) : "N/A"}
-                                </div>
+                    </div>
                                 {paymentMethodDisplay === 'OFFLINE' && !isPaidStatus && (
                                     <div className="alert alert-info mt-2 small">
                                         <FontAwesomeIcon icon={faInfoCircle} className="me-2" />
@@ -1988,7 +1988,7 @@ const AppointmentCreation = () => {
                             <div className="alert alert-success mt-3">
                                 <FontAwesomeIcon icon={faCheckCircle} className="me-2" />
                                 <strong>Pre-paid Appointment:</strong> All selected vaccines have been pre-paid. No additional payment is required.
-                            </div>
+                    </div>
                         )}
                     </div>
                     

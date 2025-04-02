@@ -103,7 +103,29 @@ public enum ErrorCode {
     // Payment related errors (10xxx)
     PAYMENT_FAILED(10000, "Payment failed"),
     PAYMENT_ALREADY_PROCESSED(10001, "Payment already processed"),
-    INVALID_PAYMENT_METHOD(10002, "Invalid payment method"), INVALID_APPOINTMENT_VACCINE_REQUEST(10003, "Invalid appointment vaccine request" ), DOCTOR_NOT_FOUND(1004,"doctor not found" ), DOCTOR_REQUIRED(1005,"doctor is required" );
+    INVALID_PAYMENT_METHOD(10002, "Invalid payment method"),
+    INVALID_APPOINTMENT_VACCINE_REQUEST(10003, "Invalid appointment vaccine request"),
+    PAYMENT_NOT_FOUND(10004, "Payment not found"),
+    INSUFFICIENT_PAYMENT(10005, "Insufficient payment amount"),
+
+    // Doctor related errors (11xxx)
+    DOCTOR_NOT_FOUND(11000, "Doctor not found"),
+    DOCTOR_REQUIRED(11001, "Doctor is required"),
+    NOT_A_DOCTOR(11002, "User is not a doctor"),
+
+    // Nurse related errors (12xxx)
+    NURSE_NOT_FOUND(12000, "Nurse not found"),
+    NOT_A_NURSE(12001, "User is not a nurse"),
+
+    // Staff related errors (13xxx)
+    STAFF_NOT_FOUND(13000, "Staff not found"),
+    NOT_A_STAFF(13001, "User is not a staff member"),
+
+    // Vaccination related errors (14xxx)
+    APPOINTMENT_VACCINE_NOT_FOUND(14000, "Appointment vaccine not found"),
+    INVALID_STATUS(14001, "Invalid status for the requested operation"),
+    POST_VACCINATION_CARE_NOT_FOUND(14002, "Post-vaccination care record not found"),
+    VACCINATION_NOT_COMPLETED(14003, "Vaccination not completed");
 
     private final int code;
     private final String message;

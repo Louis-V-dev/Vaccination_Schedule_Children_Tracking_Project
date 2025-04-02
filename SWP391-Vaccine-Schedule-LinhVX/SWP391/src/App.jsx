@@ -23,6 +23,13 @@ import AppointmentList from './user/AppointmentList';
 import PaymentStatus from './user/PaymentStatus';
 import MomoDebug from './components/payment/MomoDebug';
 
+// Staff role dashboards
+import ReceptionistDashboard from './employee/components/ReceptionistDashboard';
+import CashierDashboard from './employee/components/CashierDashboard';
+import DoctorDashboard from './employee/components/DoctorDashboard';
+import NurseDashboard from './employee/components/NurseDashboard';
+import StaffDashboard from './employee/components/StaffDashboard';
+
 // Create placeholder components for the routes we'll implement later
 const VaccinationHistoryPage = () => <div>Vaccination History page will be implemented soon.</div>;
 const ServicePackagePage = () => <div>Service Package page will be implemented soon.</div>;
@@ -52,6 +59,13 @@ function App() {
 			<Route path={"/payment/example"} element={<PaymentExample />} />
 			<Route path={"/payment/status"} element={<PaymentStatus />} />
 			<Route path={"/payment/debug"} element={<MomoDebug />} />
+
+			{/* Staff role dashboards */}
+			<Route path={"/receptionist"} element={<ReceptionistDashboard />} />
+			<Route path={"/cashier"} element={<CashierDashboard />} />
+			<Route path={"/doctor"} element={<DoctorDashboard />} />
+			<Route path={"/nurse"} element={<NurseDashboard />} />
+			<Route path={"/staff"} element={<StaffDashboard />} />
 
 			{/*Admin page*/}
 			<Route path={"/ManageAccount"} element={<AccountManage />} />

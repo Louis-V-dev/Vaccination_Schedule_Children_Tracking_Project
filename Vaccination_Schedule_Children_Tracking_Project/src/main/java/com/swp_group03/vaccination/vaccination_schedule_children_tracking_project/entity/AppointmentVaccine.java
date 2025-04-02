@@ -79,7 +79,15 @@ public class AppointmentVaccine {
         this.status = VaccinationStatus.valueOf(status);
     }
 
+    public void setStatus(VaccinationStatus status) {
+        this.status = status;
+    }
+
     public String getStatus() {
         return status != null ? status.name() : null;
+    }
+
+    public VaccinationStatus getStatusEnum() {
+        return this.status;
     }
 } 

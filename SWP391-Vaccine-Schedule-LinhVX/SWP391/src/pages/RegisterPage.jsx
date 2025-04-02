@@ -196,18 +196,39 @@ function RegisterPage() {
 			// Call verify endpoint
 			const response = await authService.verifyEmail(formData.email, verificationCode);
 			
-			if (response.code === 100) {
+			if (response.success) {
+				// Clear any tokens to prevent auto-login
+				localStorage.removeItem('token');
+				localStorage.removeItem('roles');
+				localStorage.removeItem('userId');
+				localStorage.removeItem('isLoggedIn');
+				
 				toast.success("Email verified successfully!");
 				setShowVerifyModal(false);
-				navigate("/login");
+				// Redirect to login with success message in URL params
+				navigate("/login?registrationSuccess=true");
 			} else {
 				setVerificationError("Invalid verification code");
 				toast.error("Invalid verification code");
 			}
 		} catch (error) {
 			console.error('Verification error:', error);
-			setVerificationError("Verification failed");
-			toast.error("Verification failed");
+			// Check if the error indicates email is already verified
+			if (error.message && error.message.includes("already been verified")) {
+				// Clear any tokens to prevent auto-login
+				localStorage.removeItem('token');
+				localStorage.removeItem('roles');
+				localStorage.removeItem('userId');
+				localStorage.removeItem('isLoggedIn');
+				
+				toast.success("Email has already been verified. You can now log in.");
+				setShowVerifyModal(false);
+				// Redirect to login with success message in URL params
+				navigate("/login?registrationSuccess=true");
+			} else {
+				setVerificationError(error.message || "Verification failed");
+				toast.error(error.message || "Verification failed");
+			}
 		} finally {
 			setIsLoading(false);
 		}

@@ -805,17 +805,17 @@ public class AppointmentService {
             } else {
                 // Create new VaccineOfChild for individual vaccine with total doses from ComboDetail
                 vaccineOfChild = VaccineOfChild.builder()
-                    .child(appointment.getChild())
-                    .vaccine(vaccine)
+                .child(appointment.getChild())
+                .vaccine(vaccine)
                     .totalDoses(totalDoses) // Using total doses from ComboDetail, not the vaccine's standard doses
                     .currentDose(0) // Start at 0, will be incremented for first dose
                     .isCompleted(false)
-                    .startDate(LocalDateTime.now())
-                    .isFromCombo(true)
+                .startDate(LocalDateTime.now())
+                .isFromCombo(true)
                     .vaccineCombo(combo) // Link back to the combo for tracking
-                    .build();
-                
-                vaccineOfChild = vaccineOfChildRepository.save(vaccineOfChild);
+                .build();
+            
+            vaccineOfChild = vaccineOfChildRepository.save(vaccineOfChild);
                 log.info("Created new VaccineOfChild with ID: {} for vaccine: {}", vaccineOfChild.getId(), vaccine.getName());
             }
             
@@ -831,7 +831,7 @@ public class AppointmentService {
                             vaccine.getName(), doseNumber);
                         
                         // If it's the first dose, make sure it's linked to this appointment
-                        if (doseNumber == 1) {
+                    if (doseNumber == 1) {
                             DoseSchedule firstDose = existingDoseSchedule.get();
                             
                             // Set all doses of combo vaccines to UNSCHEDULED with null dates
@@ -903,40 +903,40 @@ public class AppointmentService {
      */
     private void linkDoseScheduleToAppointment(Appointment appointment, VaccineOfChild vaccineOfChild, 
                                               Vaccine vaccine, DoseSchedule doseSchedule, VaccineCombo combo) {
-        // Look for an existing appointment vaccine entry for this vaccine from the combo
-        boolean foundExisting = false;
-        for (AppointmentVaccine av : appointment.getAppointmentVaccines()) {
+                        // Look for an existing appointment vaccine entry for this vaccine from the combo
+                        boolean foundExisting = false;
+                        for (AppointmentVaccine av : appointment.getAppointmentVaccines()) {
             // Find matching vaccine entries that are from combo and match the vaccine
-            if (av.getVaccine() != null && 
-                av.getVaccine().getId().equals(vaccine.getId()) &&
+                            if (av.getVaccine() != null && 
+                                av.getVaccine().getId().equals(vaccine.getId()) &&
                 Boolean.TRUE.equals(av.getFromCombo())) {
-                
-                // Update existing entry
-                av.setVaccineOfChild(vaccineOfChild);
-                av.setDoseSchedule(doseSchedule);
+                                
+                                // Update existing entry
+                                av.setVaccineOfChild(vaccineOfChild);
+                                av.setDoseSchedule(doseSchedule);
                 av.setDoseNumber(doseSchedule.getDoseNumber());
                 av.setStatus(String.valueOf(VaccinationStatus.PENDING));
-                log.info("Updated existing AppointmentVaccine for combo vaccine: {}", vaccine.getName());
-                foundExisting = true;
-                break;
-            }
-        }
-        
-        // If no existing entry found, create a new one
-        if (!foundExisting) {
-            AppointmentVaccine appointmentVaccine = AppointmentVaccine.builder()
-                .appointment(appointment)
-                .vaccineOfChild(vaccineOfChild)
-                .vaccine(vaccine)
-                .doseSchedule(doseSchedule)
+                                log.info("Updated existing AppointmentVaccine for combo vaccine: {}", vaccine.getName());
+                                foundExisting = true;
+                                break;
+                            }
+                        }
+                        
+                        // If no existing entry found, create a new one
+                        if (!foundExisting) {
+                            AppointmentVaccine appointmentVaccine = AppointmentVaccine.builder()
+                                .appointment(appointment)
+                                .vaccineOfChild(vaccineOfChild)
+                                .vaccine(vaccine)
+                                .doseSchedule(doseSchedule)
                 .doseNumber(doseSchedule.getDoseNumber())
-                .status(VaccinationStatus.PENDING)
-                .fromCombo(true)
-                .vaccineCombo(combo)
-                .build();
-            
-            appointment.getAppointmentVaccines().add(appointmentVaccine);
-            log.info("Created new AppointmentVaccine for combo vaccine: {}", vaccine.getName());
+                                .status(VaccinationStatus.PENDING)
+                                .fromCombo(true)
+                                .vaccineCombo(combo)
+                                .build();
+                            
+                            appointment.getAppointmentVaccines().add(appointmentVaccine);
+                            log.info("Created new AppointmentVaccine for combo vaccine: {}", vaccine.getName());
         }
     }
 
@@ -1112,5 +1112,65 @@ public class AppointmentService {
     public List<Appointment> findByChild(Child child) {
         log.info("Finding appointments for child: {}", child.getChild_id());
         return appointmentRepository.findByChild(child);
+    }
+
+    // Additional methods for appointment management
+    
+    /**
+     * Find appointments by status
+     */
+    public List<Appointment> findByStatus(AppointmentStatus status) {
+        log.info("Finding appointments with status: {}", status);
+        return appointmentRepository.findByStatus(status);
+    }
+    
+    /**
+     * Find appointments by date and status
+     */
+    public List<Appointment> findByAppointmentDateAndStatus(LocalDate date, AppointmentStatus status) {
+        log.info("Finding appointments on date: {} with status: {}", date, status);
+        return appointmentRepository.findByAppointmentDateAndStatus(date, status);
+    }
+    
+    /**
+     * Find appointments by doctor
+     */
+    public List<Appointment> findByDoctor(String doctorId) {
+        log.info("Finding appointments for doctor: {}", doctorId);
+        
+        // Get the doctor account
+        Account doctor = userRepo.findById(doctorId)
+            .orElseThrow(() -> new AppException(ErrorCode.DOCTOR_NOT_FOUND));
+        
+        return appointmentRepository.findByDoctor(doctor);
+    }
+    
+    /**
+     * Find appointments by doctor and date
+     */
+    public List<Appointment> findByDoctorAndAppointmentDate(String doctorId, LocalDate date) {
+        log.info("Finding appointments for doctor: {} on date: {}", doctorId, date);
+        
+        // Get the doctor account
+        Account doctor = userRepo.findById(doctorId)
+            .orElseThrow(() -> new AppException(ErrorCode.DOCTOR_NOT_FOUND));
+        
+        return appointmentRepository.findByDoctorAndAppointmentDate(doctor, date);
+    }
+    
+    /**
+     * Find all appointments
+     */
+    public List<Appointment> findAll() {
+        log.info("Finding all appointments");
+        return appointmentRepository.findAll();
+    }
+    
+    /**
+     * Find appointments by date
+     */
+    public List<Appointment> findByAppointmentDate(LocalDate date) {
+        log.info("Finding appointments on date: {}", date);
+        return appointmentRepository.findByAppointmentDate(date);
     }
 } 
